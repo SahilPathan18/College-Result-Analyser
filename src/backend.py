@@ -3,7 +3,7 @@ Backend module for Bangalore University Result Analyzer.
 Handles PDF parsing and data extraction.
 """
 
-import fitz
+import pymupdf
 import re
 
 # ════════════════════════════════════════════════════════════════
@@ -32,7 +32,7 @@ class TabulationParser:
     # ── Main entry point ──
     def parse(self, pdf_path):
         """Read the PDF and return all parsed data as a dict."""
-        doc = fitz.open(pdf_path)
+        doc = pymupdf.open(pdf_path)
 
         # Extract raw text from every page
         pages = [(p.get_text("text")) for p in doc]
