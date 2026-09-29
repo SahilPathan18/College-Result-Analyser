@@ -1,72 +1,123 @@
-# 📊 Bangalore University Result Analyzer
+# College Result Analyser
 
-A desktop application to parse and analyze Bangalore University Tabulation Register PDFs. Upload a PDF, and instantly get an interactive dashboard with student results, subject-wise breakdowns, and analytics.
+A high-performance, 100% offline desktop application built to parse, analyze, and visualize Bangalore University Tabulation Register PDF ledgers. Upload a university marksheet ledger to generate an interactive analytics dashboard featuring student rankings, subject-level breakdowns, statistical grade distributions, and multi-sheet Excel exports.
 
-![Python](https://img.shields.io/badge/Python-3.10+-blue?logo=python&logoColor=white)
-![CustomTkinter](https://img.shields.io/badge/UI-CustomTkinter-green)
-![License](https://img.shields.io/badge/License-MIT-yellow)
+[![Python](https://img.shields.io/badge/Python-3.10+-3776AB?logo=python&logoColor=white)](https://www.python.org/)
+[![CustomTkinter](https://img.shields.io/badge/UI-CustomTkinter-2e8b57)](https://github.com/TomSchimansky/CustomTkinter)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![Platform](https://img.shields.io/badge/Platform-Windows-0078D6?logo=windows&logoColor=white)](https://github.com/SahilPathan18/College-Result-Analyser)
 
-## ✨ Features
+---
 
-- **PDF Parsing** — Automatically extracts student data from Bangalore University Tabulation Register PDFs
-- **Dashboard** — At-a-glance stats: pass rate, average SGPA/CGPA, toppers, and grade distribution
-- **Student View** — Searchable, filterable table of all students with SGPA, CGPA, result, and term grade
-- **Subject Analytics** — Course-wise pass rates and grade point breakdowns
-- **Charts & Graphs** — Matplotlib-powered visualizations (SGPA distribution, pass/fail pie charts, boxplots)
-- **Excel Export** — Export all parsed data to a multi-sheet `.xlsx` file
-- **Dark Theme** — Modern dark UI built with CustomTkinter
+## Features
 
-## 🚀 Getting Started
+- **High-Speed PDF Parsing** — Automated extraction of student metadata, USN, courses, internal/external marks, SGPA, and CGPA from Bangalore University tabulation registers using PyMuPDF.
+- **100% Offline and Private** — Operates entirely locally. No student records, marks, or institution data are transmitted externally.
+- **Executive Dashboard** — Key batch metrics at a glance:
+  - Total candidates, overall pass rate, and average SGPA/CGPA
+  - Top rank holders and semester toppers
+  - Overall grade frequency distribution
+- **Student Record Explorer** — Interactive data grid with multi-attribute filtering (PASS, FAIL, PROMOTED) and instant search by Student Name or Register Number (USN).
+- **Subject-Wise Analytics** — Granular course analysis covering pass percentages, average scores, and failure rates per subject.
+- **Data Visualizations** — Embedded Matplotlib visualizations:
+  - SGPA distribution curves
+  - Pass/Fail outcome ratios
+  - Course-level score distributions
+- **Multi-Sheet Excel Export** — Direct export generating formatted `.xlsx` workbooks containing master ledgers, subject summaries, and rank lists.
+- **Modern User Interface** — Clean dark-themed desktop interface built with CustomTkinter.
+
+---
+
+## Tech Stack
+
+| Layer | Technology | Purpose |
+| :--- | :--- | :--- |
+| **User Interface** | [CustomTkinter](https://github.com/TomSchimansky/CustomTkinter) | Hardware-accelerated desktop UI components |
+| **Document Ingestion** | [PyMuPDF](https://pymupdf.readthedocs.io/) | High-throughput offline PDF extraction engine |
+| **Data Processing** | [Pandas](https://pandas.pydata.org/) & [NumPy](https://numpy.org/) | In-memory data transformation, aggregation, and statistics |
+| **Visualization** | [Matplotlib](https://matplotlib.org/) | Analytical charts embedded into the GUI |
+| **Spreadsheet Engine** | [openpyxl](https://openpyxl.readthedocs.io/) | Multi-sheet Excel workbook generation |
+| **Packaging** | [PyInstaller](https://pyinstaller.org/) | Compilation into standalone Windows executables and setup installers |
+
+---
+
+## Project Structure
+
+```
+College-Result-Analyser/
+├── src/
+│   ├── main.py              # Application entry point and window lifecycle
+│   ├── backend.py           # PDF parsing engine, regex parsers, and data models
+│   └── frontend.py          # CustomTkinter interface, views, and plot rendering
+├── scripts/
+│   ├── build.ps1            # Packaging pipeline (app folder + standalone installer)
+│   └── installer.py         # Self-extracting desktop setup logic
+├── dist/                    # Compiled binaries and release installers
+├── requirements.txt         # Runtime Python dependencies
+├── .gitignore               # Ignored build artifacts, virtual environments, and PDF inputs
+└── README.md                # Project documentation
+```
+
+---
+
+## Getting Started
 
 ### Prerequisites
 
-- Python 3.10 or higher
+- **Python 3.10** or higher
 
-### Installation
+### Running from Source
 
-1. **Clone the repository**
+1. **Clone the repository:**
    ```bash
-   git clone https://github.com/<your-username>/result-analyzer.git
-   cd result-analyzer
+   git clone https://github.com/SahilPathan18/College-Result-Analyser.git
+   cd College-Result-Analyser
    ```
 
-2. **Install dependencies**
+2. **Create and activate a virtual environment (recommended):**
+   ```powershell
+   python -m venv venv
+   .\venv\Scripts\Activate.ps1
+   ```
+
+3. **Install dependencies:**
    ```bash
    pip install -r requirements.txt
    ```
 
-3. **Run the application**
+4. **Launch the application:**
    ```bash
-   python main.py
+   python src/main.py
    ```
 
-## 📖 Usage
+---
 
-1. Click **Upload PDF** and select a Bangalore University Tabulation Register PDF
-2. Use the sidebar to navigate between **Dashboard**, **Students**, **Subjects**, and **Analytics**
-3. Filter students by **PASS/FAIL** status or search by name/USN
-4. Click **Export to Excel** to save the parsed data
+## Building the Windows Installer
 
-## 🛠️ Tech Stack
+To compile the application into a standalone Windows installer (`dist/ResultAnalyzerSetup.exe`) that runs without requiring Python:
 
-| Component | Technology |
-|-----------|------------|
-| GUI | [CustomTkinter](https://github.com/TomSchimansky/CustomTkinter) |
-| PDF Parsing | [PyMuPDF (fitz)](https://pymupdf.readthedocs.io/) |
-| Data Processing | [Pandas](https://pandas.pydata.org/) |
-| Charts | [Matplotlib](https://matplotlib.org/) |
-| Excel Export | [openpyxl](https://openpyxl.readthedocs.io/) |
-
-## 📁 Project Structure
-
-```
-result-analyzer/
-├── main.py              # Application entry point (parser + GUI)
-├── requirements.txt     # Python dependencies
-├── .gitignore
-└── README.md
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts\build.ps1
 ```
 
-## 📄 License
+The output installer will be generated in `dist/ResultAnalyzerSetup.exe`.
 
-This project is open source under the [MIT License](LICENSE).
+---
+
+## Usage Workflow
+
+1. Open the application and click **Upload PDF**.
+2. Select a Bangalore University Tabulation Register PDF file.
+3. The parser processes the document in seconds and displays the **Dashboard**.
+4. Use the navigation sidebar to access:
+   - **Dashboard**: Batch summary metrics and topper lists.
+   - **Students**: Individual candidate records, marks, and filters.
+   - **Subjects**: Course-by-course performance and pass rates.
+   - **Analytics**: Distribution charts and graphical breakdowns.
+5. Click **Export to Excel** to produce a spreadsheet report.
+
+---
+
+## License
+
+This project is licensed under the [MIT License](LICENSE).
