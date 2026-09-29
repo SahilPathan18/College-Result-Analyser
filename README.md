@@ -4,7 +4,6 @@ A high-performance, 100% offline desktop application built to parse, analyze, an
 
 [![Python](https://img.shields.io/badge/Python-3.10+-3776AB?logo=python&logoColor=white)](https://www.python.org/)
 [![CustomTkinter](https://img.shields.io/badge/UI-CustomTkinter-2e8b57)](https://github.com/TomSchimansky/CustomTkinter)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Platform](https://img.shields.io/badge/Platform-Windows-0078D6?logo=windows&logoColor=white)](https://github.com/SahilPathan18/College-Result-Analyser)
 
 ---
@@ -115,9 +114,3 @@ The output installer will be generated in `dist/ResultAnalyzerSetup.exe`.
    - **Subjects**: Course-by-course performance and pass rates.
    - **Analytics**: Distribution charts and graphical breakdowns.
 5. Click **Export to Excel** to produce a spreadsheet report.
-
----
-
-## License
-
-This project is licensed under the [MIT License](LICENSE).
