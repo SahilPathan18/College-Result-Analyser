@@ -1,0 +1,32 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual environment
+venv/
+env/
+.venv/
+
+# PyInstaller build artifacts
+build/
+dist/
+*.spec
+
+# IDE / Editor
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS files
+Thumbs.db
+.DS_Store
+
+# Debug / temp files
+debug_*.txt
+debug_*.py
+
+# PDF test files (don't commit large PDFs)
+*.pdf

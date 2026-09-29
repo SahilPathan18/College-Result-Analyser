@@ -1,0 +1,6 @@
+customtkinter
+matplotlib
+pandas
+PyMuPDF
+openpyxl
+numpy
