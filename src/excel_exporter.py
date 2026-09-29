@@ -5,11 +5,34 @@ with KPI dashboards, zebra striping, conditional formatting, freeze panes,
 and auto-fitted columns using openpyxl.
 """
 
+import re
 from datetime import datetime
 import openpyxl
 from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 from openpyxl.utils import get_column_letter
 import pandas as pd
+
+
+def clean_term_grade(val) -> str:
+    """Format Term Grade cleanly into single-line text without trailing PDF artifacts."""
+    if val is None or pd.isna(val):
+        return "-"
+    cleaned = str(val).replace("\r", " ").replace("\n", " ").strip()
+    cleaned = re.sub(r'\s+M(\.C.*)?$', '', cleaned, flags=re.IGNORECASE).strip()
+    if "(" in cleaned and not cleaned.endswith(")"):
+        cleaned += ")"
+    return cleaned
+
+
+def extract_letter_grade(val) -> str:
+    """Extract standard letter grade (O, A+, A, B+, B, C, P, F) for analytics."""
+    cleaned = clean_term_grade(val)
+    m = re.match(r'^(O|A\+|A|B\+|B|C|P|F)(?:\s|\(|$)', cleaned, re.IGNORECASE)
+    if m:
+        return m.group(1).upper()
+    if "FAIL" in cleaned.upper() or cleaned.startswith("-"):
+        return "F"
+    return cleaned
 
 
 # ── Color Palette (Modern Executive Slate & Navy) ──
@@ -120,7 +143,7 @@ def _create_summary_sheet(wb, metadata, df, courses):
     # ── Title Banner ──
     ws.merge_cells("A1:G1")
     title_cell = ws["A1"]
-    title_cell.value = "COLLEGE RESULT ANALYZER — EXECUTIVE REPORT"
+    title_cell.value = "COLLEGE RESULT ANALYZER - EXECUTIVE REPORT"
     title_cell.font = Font(name="Segoe UI", size=14, bold=True, color=CLR_WHITE)
     title_cell.fill = PatternFill(start_color=CLR_PRIMARY_NAVY, end_color=CLR_PRIMARY_NAVY, fill_type="solid")
     title_cell.alignment = Alignment(horizontal="center", vertical="center")
@@ -215,9 +238,13 @@ def _create_summary_sheet(wb, metadata, df, courses):
         c.border = _get_border()
     ws.row_dimensions[5].height = 18
 
-    # Grade counting
+    # Grade counting with robust regex normalization
     standard_grades = ["O", "A+", "A", "B+", "B", "C", "P", "F"]
-    grade_counts = df["Term Grade"].value_counts().to_dict() if "Term Grade" in df.columns else {}
+    if "Term Grade" in df.columns:
+        grade_series = df["Term Grade"].apply(extract_letter_grade)
+        grade_counts = grade_series.value_counts().to_dict()
+    else:
+        grade_counts = {}
 
     for g_idx, grade in enumerate(standard_grades, start=6):
         ws.row_dimensions[g_idx].height = 19
@@ -290,7 +317,7 @@ def _create_summary_sheet(wb, metadata, df, courses):
             str(row.get("USN", "")),
             str(row.get("Name", "")),
             str(row.get("Result", "")),
-            str(row.get("Term Grade", "")),
+            clean_term_grade(row.get("Term Grade", "")),
             float(row.get("SGPA", 0.0)),
         ]
 
@@ -349,6 +376,11 @@ def _create_students_sheet(wb, df, courses):
 
         for c_idx, col_name in enumerate(final_cols, start=1):
             val = row[col_name]
+            if col_name == "Term Grade":
+                val = clean_term_grade(val)
+            elif pd.isna(val):
+                val = ""
+
             cell = ws.cell(row=r_idx, column=c_idx, value=val)
             cell.font = Font(name="Segoe UI", size=9, color=CLR_TEXT_DARK)
             cell.fill = PatternFill(start_color=row_bg, fill_type="solid")

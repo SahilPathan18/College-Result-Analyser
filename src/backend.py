@@ -298,9 +298,10 @@ class TabulationParser:
                 student['result'] = res.upper()
 
         # ── Term Grade ── ("Term Grade: B+ (Good)")
-        grade = self._find(r'Term\s+Grade:\s*([A-Za-z+\-\s()]+)', text)
+        grade = self._find(r'Term\s+Grade:\s*([^\n\r]+)', text)
         if grade:
-            student['term_grade'] = re.sub(r'\s*(Letter|Grade|M\.C).*', '', grade).strip()
+            grade = re.sub(r'\s*(Letter|Grade|M\.C).*', '', grade, flags=re.IGNORECASE).strip()
+            student['term_grade'] = grade
 
         # ── M.C.No ── ("M.C.No MC0326067359")
         mc = self._find(r'M\.C\.No\s+(\S+)', text)
