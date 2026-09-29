@@ -629,6 +629,11 @@ class ResultAnalyzerApp(ctk.CTk):
         try:
             export_pretty_excel(filepath, self.data, self.df)
             messagebox.showinfo("Export Successful", f"Professional Excel report exported to:\n{filepath}")
+        except PermissionError:
+            messagebox.showerror(
+                "File in Use",
+                f"Cannot save the file because it is currently open in Microsoft Excel or another program:\n\n{filepath}\n\nPlease close the file in Excel and try exporting again."
+            )
         except Exception as e:
             messagebox.showerror("Export Error", f"Failed to export Excel report:\n{str(e)}")
 
