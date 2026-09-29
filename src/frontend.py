@@ -13,6 +13,11 @@ import pandas as pd                               # DataFrames for tabular data
 import os                                         # File path utilities
 
 from backend import TabulationParser
+try:
+    from excel_exporter import export_pretty_excel
+except ImportError:
+    from src.excel_exporter import export_pretty_excel
+
 
 # ──────────────── GLOBAL CONFIG ────────────────
 plt.style.use('dark_background')       # Dark charts to match our dark UI
@@ -622,30 +627,10 @@ class ResultAnalyzerApp(ctk.CTk):
             return
 
         try:
-            with pd.ExcelWriter(filepath, engine='openpyxl') as writer:
-                # Sheet 1: All student data
-                self.df.to_excel(writer, sheet_name='Students', index=False)
-                # Sheet 2: Course index
-                if self.data['courses']:
-                    pd.DataFrame(self.data['courses']).to_excel(writer, sheet_name='Courses', index=False)
-                # Sheet 3: Summary statistics
-                vs, vc = self.df['SGPA'][self.df['SGPA'] > 0], self.df['CGPA'][self.df['CGPA'] > 0]
-                n = len(self.df)
-                p = len(self.df[self.df['Result'] == 'PASS'])
-                fmt = lambda s, fn: f"{fn(s):.2f}" if not s.empty else "N/A"
-                summary = pd.DataFrame({
-                    'Metric': ['Total Students', 'Passed', 'Failed', 'Pass %',
-                               'Avg SGPA', 'Avg CGPA', 'Median SGPA', 'Median CGPA',
-                               'Max SGPA', 'Min SGPA', 'Max CGPA', 'Min CGPA'],
-                    'Value': [n, p, n - p, f"{p / n * 100:.1f}%" if n else "0%",
-                              fmt(vs, lambda s: s.mean()), fmt(vc, lambda s: s.mean()),
-                              fmt(vs, lambda s: s.median()), fmt(vc, lambda s: s.median()),
-                              fmt(vs, max), fmt(vs, min), fmt(vc, max), fmt(vc, min)]
-                })
-                summary.to_excel(writer, sheet_name='Summary', index=False)
-            messagebox.showinfo("Export Successful", f"Data exported to:\n{filepath}")
+            export_pretty_excel(filepath, self.data, self.df)
+            messagebox.showinfo("Export Successful", f"Professional Excel report exported to:\n{filepath}")
         except Exception as e:
-            messagebox.showerror("Export Error", f"Failed to export:\n{str(e)}")
+            messagebox.showerror("Export Error", f"Failed to export Excel report:\n{str(e)}")
 
     # ════════════════ CLEAR DATA ════════════════
     def clear_data(self):
