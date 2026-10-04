@@ -3,7 +3,6 @@ Frontend module for Bangalore University Result Analyzer.
 Handles the GUI and data visualization.
 """
 
-import tkinter as tk
 from tkinter import filedialog, messagebox
 import customtkinter as ctk                      # Modern themed tkinter widgets
 import matplotlib.pyplot as plt                   # Charts and graphs
