@@ -1,6 +1,8 @@
-customtkinter
-matplotlib
-pandas
-PyMuPDF
-openpyxl
-numpy
+customtkinter>=5.2.2
+matplotlib>=3.8
+pandas>=2.0
+PyMuPDF>=1.23
+openpyxl>=3.1
+numpy>=1.26
+pillow>=10.0
+tkinterdnd2>=0.3.0

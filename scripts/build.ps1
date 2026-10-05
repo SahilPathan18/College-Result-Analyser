@@ -1,20 +1,52 @@
 # build.ps1
-# Professional Build Script for Result Analyzer
+# Professional Build Script for Bangalore University Result Analyzer
+
+$ErrorActionPreference = "Stop"
 
 Write-Host "=========================================="
-Write-Host "Building Result Analyzer App (Directory)"
+Write-Host "1. Cleaning previous build artifacts..."
 Write-Host "=========================================="
-.\venv\Scripts\pyinstaller --noconsole --name ResultAnalyzer src\main.py -y
+if (Test-Path "build") { Remove-Item -Recurse -Force "build" }
+if (Test-Path "dist") { Remove-Item -Recurse -Force "dist" }
 
 Write-Host ""
 Write-Host "=========================================="
-Write-Host "Building Result Analyzer Setup (Installer)"
+Write-Host "2. Building Application (Directory Mode)..."
 Write-Host "=========================================="
-.\venv\Scripts\pyinstaller --onefile --noconsole --add-data "dist\ResultAnalyzer;ResultAnalyzer" --name ResultAnalyzerSetup scripts\installer.py -y
+.\venv\Scripts\python -m PyInstaller `
+    --noconsole `
+    --name ResultAnalyzer `
+    --icon "assets/logo.ico" `
+    --add-data "assets;assets" `
+    --collect-all customtkinter `
+    --collect-all tkinterdnd2 `
+    --hidden-import matplotlib.backends.backend_tkagg `
+    --hidden-import openpyxl `
+    --distpath dist `
+    --workpath build `
+    src/main.py -y
+
+# Ensure assets directory is also available directly in root of dist/ResultAnalyzer
+Copy-Item -Path "assets" -Destination "dist/ResultAnalyzer/assets" -Recurse -Force
+
+Write-Host ""
+Write-Host "=========================================="
+Write-Host "3. Building Standalone Setup Installer..."
+Write-Host "=========================================="
+.\venv\Scripts\python -m PyInstaller `
+    --onefile `
+    --noconsole `
+    --name ResultAnalyzerSetup `
+    --icon "assets/logo.ico" `
+    --add-data "dist/ResultAnalyzer;ResultAnalyzer" `
+    --add-data "assets;assets" `
+    --distpath dist `
+    --workpath build `
+    scripts/installer.py -y
 
 Write-Host ""
 Write-Host "=========================================="
 Write-Host "Build Complete!"
-Write-Host "The fast installer can be found here:"
+Write-Host "Installer Location:"
 Write-Host "dist\ResultAnalyzerSetup.exe"
 Write-Host "=========================================="

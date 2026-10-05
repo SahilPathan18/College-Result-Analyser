@@ -1,531 +1,516 @@
 """
 Excel Export Engine for College Result Analyser.
-Generates executive-grade, beautifully formatted multi-sheet Excel reports
-with KPI dashboards, zebra striping, conditional formatting, freeze panes,
-and auto-fitted columns using openpyxl.
+Generates university tabulation register analysis workbooks matching the official
+Bangalore University departmental ledger format:
+- Institutional & Examination Headers
+- Multi-tier Subject Headers (Subject name, SEE/IA breakdown)
+- Student Data Grid with automated Excel formulas for totals and percentages
+- Visual pass/fail highlighting (soft green / soft red)
+- Subject-wise Result Analysis table with dynamic pass rates
+- Overall Class Result Summary with grade tier segmentation (Distinction, First Class, etc.)
+- Secondary worksheet for Backlog / Repeater candidates
 """
+from __future__ import annotations
 
 import re
 from datetime import datetime
+from pathlib import Path
 import openpyxl
 from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 from openpyxl.utils import get_column_letter
-import pandas as pd
 
-
-def clean_term_grade(val) -> str:
-    """Format Term Grade cleanly into single-line text without trailing PDF artifacts."""
-    if val is None or pd.isna(val):
-        return "-"
-    cleaned = str(val).replace("\r", " ").replace("\n", " ").strip()
-    cleaned = re.sub(r'\s+M(\.C.*)?$', '', cleaned, flags=re.IGNORECASE).strip()
-    if "(" in cleaned and not cleaned.endswith(")"):
-        cleaned += ")"
-    return cleaned
-
-
-def extract_letter_grade(val) -> str:
-    """Extract standard letter grade (O, A+, A, B+, B, C, P, F) for analytics."""
-    cleaned = clean_term_grade(val)
-    m = re.match(r'^(O|A\+|A|B\+|B|C|P|F)(?:\s|\(|$)', cleaned, re.IGNORECASE)
-    if m:
-        return m.group(1).upper()
-    if "FAIL" in cleaned.upper() or cleaned.startswith("-"):
-        return "F"
-    return cleaned
-
-
-# ── Color Palette (Modern Executive Slate & Navy) ──
-CLR_PRIMARY_NAVY = "1E3A8A"      # Main headers
-CLR_PRIMARY_LIGHT = "EFF6FF"     # Soft metadata banner
-CLR_INDIGO = "312E81"            # Secondary headers
-CLR_ACCENT_BLUE = "2563EB"       # Accents & card banners
-CLR_ALT_ROW = "F8FAFC"           # Zebra striping
+# Color palette
+CLR_NAVY = "1F4E78"        # Main dark blue headers
+CLR_BLUE = "2E75B6"        # Sub-headers (SEE, IA, Total)
+CLR_PASS_BG = "C6EFCE"     # Soft green fill for passed subjects
+CLR_PASS_FG = "006100"     # Dark green text
+CLR_FAIL_BG = "FFC7CE"     # Soft red fill for failed subjects
+CLR_FAIL_FG = "9C0006"     # Dark red text
+CLR_BORDER = "B7B7B7"      # Clean thin grid border
 CLR_WHITE = "FFFFFF"
-CLR_TEXT_DARK = "0F172A"
-CLR_TEXT_MUTED = "475569"
-CLR_BORDER = "CBD5E1"            # Light clean border
-CLR_BORDER_STRONG = "94A3B8"     # Stronger header border
-
-# Status colors
-CLR_PASS_BG = "DCFCE7"           # Soft emerald green
-CLR_PASS_FG = "15803D"
-CLR_FAIL_BG = "FEE2E2"           # Soft rose red
-CLR_FAIL_FG = "B91C1C"
-CLR_PROMOTED_BG = "FEF3C7"       # Soft amber
-CLR_PROMOTED_FG = "B45309"
-
-# Podium colors for top rankers
-CLR_GOLD_BG = "FEF08A"
-CLR_SILVER_BG = "E2E8F0"
-CLR_BRONZE_BG = "FED7AA"
 
 
-def _get_border(color=CLR_BORDER, style="thin"):
-    side = Side(border_style=style, color=color)
-    return Border(top=side, bottom=side, left=side, right=side)
+def _get_short_code(code: str) -> str:
+    m = re.search(r"-(.+)$", code)
+    return m.group(1).strip() if m else code.strip()
 
 
-def _get_header_border():
-    thin = Side(border_style="thin", color=CLR_BORDER_STRONG)
-    thick = Side(border_style="medium", color=CLR_PRIMARY_NAVY)
-    return Border(top=thin, bottom=thick, left=thin, right=thin)
+def _format_semester(sem: str) -> str:
+    sem_str = str(sem).strip().upper()
+    num_map = {
+        "1": "1st Sem", "2": "2nd Sem", "3": "3rd Sem", "4": "4th Sem", "5": "5th Sem", "6": "6th Sem", "7": "7th Sem", "8": "8th Sem",
+        "I": "1st Sem", "II": "2nd Sem", "III": "3rd Sem", "IV": "4th Sem", "V": "5th Sem", "VI": "6th Sem", "VII": "7th Sem", "VIII": "8th Sem"
+    }
+    return num_map.get(sem_str, f"{sem_str} Sem" if "SEM" not in sem_str else sem_str)
 
 
-def _autofit_columns(ws, min_width=10, max_width=45):
-    """Automatically adjust column widths to prevent text clipping."""
-    for col in ws.columns:
-        max_len = 0
-        col_letter = get_column_letter(col[0].column)
-        for cell in col:
-            # Skip merged cells or multi-line header titles for width calc
-            if cell.coordinate in ws.merged_cells:
-                continue
-            val_str = str(cell.value or "")
-            if "\n" in val_str:
-                val_str = max(val_str.split("\n"), key=len)
-            max_len = max(max_len, len(val_str))
-        ws.column_dimensions[col_letter].width = min(max(max_len + 4, min_width), max_width)
+def _format_program(prog: str) -> str:
+    p = prog.strip()
+    if "Computer Applications" in p:
+        return "BCA"
+    if "Business Administration" in p:
+        return "BBA"
+    if "Commerce" in p:
+        return "B.Com"
+    if "Science" in p:
+        return "B.Sc"
+    return p
 
 
-def _enable_gridlines(ws):
-    """Ensure gridlines are visible even over filled cells."""
-    ws.views.sheetView[0].showGridLines = True
+def _is_practical(course: dict) -> bool:
+    code = course.get("code", "").upper()
+    name = course.get("name", "").upper()
+    return "DSCP" in code or "LAB" in code or "LAB" in name or "PRACTICAL" in name
 
 
-def export_pretty_excel(filepath: str, data: dict, df: pd.DataFrame) -> None:
-    """
-    Build a comprehensive, beautifully styled multi-sheet Excel workbook.
-    Sheets:
-      1. Executive Summary (KPIs, Grade Distribution, Toppers Leaderboard)
-      2. Student Master List (Full student marks & status with conditional formatting)
-      3. Subject Analytics (Per-course pass rates, averages, failure metrics)
-      4. Course Catalog (Official course syllabus index)
-    """
+def _style_range(ws, cell_range, font=None, fill=None, border=None, alignment=None):
+    """Ensure all cells within a merged range have consistent formatting and borders."""
+    for row in ws[cell_range]:
+        for cell in row:
+            if font:
+                cell.font = font
+            if fill:
+                cell.fill = fill
+            if border:
+                cell.border = border
+            if alignment:
+                cell.alignment = alignment
+
+
+def _get_sem_ord(sem: str) -> str:
+    sem_str = str(sem).strip().upper()
+    num_map = {
+        "1": "1st", "2": "2nd", "3": "3rd", "4": "4th", "5": "5th", "6": "6th", "7": "7th", "8": "8th",
+        "I": "1st", "II": "2nd", "III": "3rd", "IV": "4th", "V": "5th", "VI": "6th", "VII": "7th", "VIII": "8th"
+    }
+    return num_map.get(sem_str, sem_str)
+
+
+def export_pretty_excel(filepath: str, data: dict, df=None) -> None:
+    """Generate the official institutional tabulation Excel workbook."""
     wb = openpyxl.Workbook()
-    # Remove default sheet
-    wb.remove(wb.active)
-
-    metadata = data.get("metadata", {})
+    meta = data.get("metadata", {})
     courses = data.get("courses", [])
+    all_students = data.get("students", [])
 
-    # Ensure a working copy of student data
-    students_df = df.copy() if df is not None else pd.DataFrame()
-    if not students_df.empty:
-        # Calculate Rank based on SGPA descending, then Total Marks
-        if "SGPA" in students_df.columns:
-            sort_cols = ["SGPA"]
-            if "Total Marks" in students_df.columns:
-                sort_cols.append("Total Marks")
-            students_df = students_df.sort_values(by=sort_cols, ascending=False).reset_index(drop=True)
-            students_df["Rank"] = range(1, len(students_df) + 1)
+    current_students = sorted(
+        [s for s in all_students if s.get("year_type") == "Current Year"],
+        key=lambda s: s.get("usn", "")
+    )
+    if not current_students:
+        current_students = sorted(all_students, key=lambda s: s.get("usn", ""))
 
-    # 1. Executive Summary Sheet
-    _create_summary_sheet(wb, metadata, students_df, courses)
+    backlog_students = sorted(
+        [s for s in all_students if s.get("year_type") != "Current Year"],
+        key=lambda s: s.get("usn", "")
+    )
 
-    # 2. Student Master List Sheet
-    _create_students_sheet(wb, students_df, courses)
+    sem_ord = _get_sem_ord(meta.get("semester", "5th"))
+    sheet_title = f"{sem_ord} Sem Result Analysis"
+    ws = wb.active
+    ws.title = sheet_title
 
-    # 3. Subject Analytics Sheet
-    _create_subjects_sheet(wb, students_df, courses)
+    _render_analysis_sheet(ws, meta, courses, current_students, is_backlog=False)
 
-    # 4. Course Catalog Sheet
-    _create_courses_sheet(wb, courses)
+    if backlog_students:
+        ws_back = wb.create_sheet(title="Backlog Students")
+        _render_analysis_sheet(ws_back, meta, courses, backlog_students, is_backlog=True)
 
-    # Save finalized workbook
+    Path(filepath).parent.mkdir(parents=True, exist_ok=True)
     wb.save(filepath)
 
 
-def _create_summary_sheet(wb, metadata, df, courses):
-    ws = wb.create_sheet(title="Executive Summary")
-    _enable_gridlines(ws)
+def _render_analysis_sheet(ws, meta: dict, courses: list[dict], students: list[dict], is_backlog=False) -> None:
+    # Styles
+    font_title = Font(name="Calibri", size=14, bold=True)
+    font_subtitle = Font(name="Calibri", size=11, bold=True)
+    font_sec_head = Font(name="Calibri", size=12, bold=True)
+    font_th = Font(name="Calibri", size=10, bold=True, color=CLR_WHITE)
+    font_sub_th = Font(name="Calibri", size=9, bold=True, color=CLR_WHITE)
+    font_data = Font(name="Calibri", size=11, bold=False)
+    font_data_bold = Font(name="Calibri", size=11, bold=True)
+    font_pass = Font(name="Calibri", size=11, bold=True, color=CLR_PASS_FG)
+    font_fail = Font(name="Calibri", size=11, bold=True, color=CLR_FAIL_FG)
 
-    # ── Title Banner ──
-    ws.merge_cells("A1:G1")
+    fill_navy = PatternFill("solid", fgColor=CLR_NAVY)
+    fill_blue = PatternFill("solid", fgColor=CLR_BLUE)
+    fill_pass = PatternFill("solid", fgColor=CLR_PASS_BG)
+    fill_fail = PatternFill("solid", fgColor=CLR_FAIL_BG)
+
+    thin_border = Border(
+        left=Side(style="thin", color=CLR_BORDER),
+        right=Side(style="thin", color=CLR_BORDER),
+        top=Side(style="thin", color=CLR_BORDER),
+        bottom=Side(style="thin", color=CLR_BORDER)
+    )
+
+    align_center = Alignment(horizontal="center", vertical="center", wrap_text=True)
+    align_left = Alignment(horizontal="left", vertical="center", wrap_text=True)
+
+    num_courses = len(courses)
+    num_students = len(students)
+
+    # Calculate column indices
+    start_sub_col = 4
+    end_sub_col = start_sub_col + (num_courses * 3) - 1
+    col_tot_marks = end_sub_col + 1
+    col_max_marks = col_tot_marks + 1
+    col_pct = col_tot_marks + 2
+    col_sgpa = col_tot_marks + 3
+    col_cgpa = col_tot_marks + 4
+    col_result = col_tot_marks + 5
+    last_col = col_result
+    last_col_letter = get_column_letter(last_col)
+
+    # 1. Row 1: Institutional Header
+    ws.row_dimensions[1].height = 24
+    ws.merge_cells(f"A1:{last_col_letter}1")
     title_cell = ws["A1"]
-    title_cell.value = "COLLEGE RESULT ANALYZER - EXECUTIVE REPORT"
-    title_cell.font = Font(name="Segoe UI", size=14, bold=True, color=CLR_WHITE)
-    title_cell.fill = PatternFill(start_color=CLR_PRIMARY_NAVY, end_color=CLR_PRIMARY_NAVY, fill_type="solid")
-    title_cell.alignment = Alignment(horizontal="center", vertical="center")
-    ws.row_dimensions[1].height = 34
+    title_cell.value = meta.get("college", "ST PAULS COLLEGE, NELAGADERANAHALLI").upper()
+    title_cell.font = font_title
+    title_cell.alignment = align_center
 
-    # ── Metadata Banner ──
-    ws.merge_cells("A2:G2")
-    meta_cell = ws["A2"]
-    univ = metadata.get("university", "Bangalore University")
-    prog = metadata.get("program", "Undergraduate Program")
-    sem = metadata.get("semester", "N/A")
-    exam = metadata.get("exam_month", "N/A")
-    now_str = datetime.now().strftime("%d %b %Y, %I:%M %p")
-    meta_cell.value = f"{univ}  |  {prog} (Sem: {sem})  |  Exam: {exam}  |  Exported: {now_str}"
-    meta_cell.font = Font(name="Segoe UI", size=9, bold=True, color=CLR_PRIMARY_NAVY)
-    meta_cell.fill = PatternFill(start_color=CLR_PRIMARY_LIGHT, end_color=CLR_PRIMARY_LIGHT, fill_type="solid")
-    meta_cell.alignment = Alignment(horizontal="center", vertical="center")
-    ws.row_dimensions[2].height = 22
+    # 2. Row 2: Examination Subtitle
+    ws.row_dimensions[2].height = 20
+    ws.merge_cells(f"A2:{last_col_letter}2")
+    sub_cell = ws["A2"]
+    sem_ord = _get_sem_ord(meta.get("semester", "5th"))
+    prog_name = _format_program(meta.get("program", "BCA"))
+    month_name = meta.get("exam_month", "Dec 2025").replace("/", " ")
+    uni_name = meta.get("university", "Bangalore University")
+    cohort_tag = " (Backlog / Repeater Analysis)" if is_backlog else ""
+    sub_cell.value = f"{sem_ord} Semester {prog_name} | Examination Result Analysis — {month_name} ({uni_name}){cohort_tag}"
+    sub_cell.font = font_subtitle
+    sub_cell.alignment = align_center
 
-    # Border below header banner
-    thin_bottom = Border(bottom=Side(border_style="medium", color=CLR_PRIMARY_NAVY))
-    for col_idx in range(1, 8):
-        ws.cell(row=2, column=col_idx).border = thin_bottom
-
-    # Calculations
-    total_students = len(df)
-    passed_students = len(df[df["Result"] == "PASS"]) if "Result" in df.columns else 0
-    failed_students = total_students - passed_students
-    pass_pct = (passed_students / total_students * 100) if total_students > 0 else 0.0
-
-    valid_sgpa = df["SGPA"][df["SGPA"] > 0] if "SGPA" in df.columns else pd.Series(dtype=float)
-    valid_cgpa = df["CGPA"][df["CGPA"] > 0] if "CGPA" in df.columns else pd.Series(dtype=float)
-
-    avg_sgpa = valid_sgpa.mean() if not valid_sgpa.empty else 0.0
-    max_sgpa = valid_sgpa.max() if not valid_sgpa.empty else 0.0
-    min_sgpa = valid_sgpa.min() if not valid_sgpa.empty else 0.0
-    avg_cgpa = valid_cgpa.mean() if not valid_cgpa.empty else 0.0
-
-    # ── Section 1: KPI Metrics Table (Columns A-C) ──
-    ws.merge_cells("A4:C4")
-    kpi_hdr = ws["A4"]
-    kpi_hdr.value = "KEY PERFORMANCE INDICATORS"
-    kpi_hdr.font = Font(name="Segoe UI", size=10, bold=True, color=CLR_WHITE)
-    kpi_hdr.fill = PatternFill(start_color=CLR_ACCENT_BLUE, end_color=CLR_ACCENT_BLUE, fill_type="solid")
-    kpi_hdr.alignment = Alignment(horizontal="center", vertical="center")
+    # 3. Row Heights for Headers
+    ws.row_dimensions[3].height = 28
     ws.row_dimensions[4].height = 22
 
-    kpis = [
-        ("Total Candidates", total_students, "#,##0"),
-        ("Candidates Passed", passed_students, "#,##0"),
-        ("Candidates Failed", failed_students, "#,##0"),
-        ("Overall Pass Rate", pass_pct / 100.0, "0.0%"),
-        ("Class Average SGPA", avg_sgpa, "0.00"),
-        ("Highest SGPA", max_sgpa, "0.00"),
-        ("Lowest SGPA", min_sgpa, "0.00"),
-        ("Class Average CGPA", avg_cgpa, "0.00"),
+    # 4. Multi-tier Column Headers
+    # A3:A4: Sl No
+    ws.merge_cells("A3:A4")
+    ws["A3"].value = "Sl\nNo"
+    _style_range(ws, "A3:A4", font=font_th, fill=fill_navy, border=thin_border, alignment=align_center)
+
+    # B3:B4: Register No
+    ws.merge_cells("B3:B4")
+    ws["B3"].value = "Register No"
+    _style_range(ws, "B3:B4", font=font_th, fill=fill_navy, border=thin_border, alignment=align_center)
+
+    # C3:C4: Student Name
+    ws.merge_cells("C3:C4")
+    ws["C3"].value = "Student Name"
+    _style_range(ws, "C3:C4", font=font_th, fill=fill_navy, border=thin_border, alignment=align_center)
+
+    # Course Headers
+    sub_total_col_letters = []
+    for i, course in enumerate(courses):
+        col1 = start_sub_col + (i * 3)
+        col2 = col1 + 1
+        col3 = col1 + 2
+        let1, let2, let3 = get_column_letter(col1), get_column_letter(col2), get_column_letter(col3)
+        sub_total_col_letters.append(let3)
+
+        short_code = _get_short_code(course["code"])
+        c_name = course.get("name", short_code)
+
+        # Row 3: Subject Name (Code)
+        ws.merge_cells(f"{let1}3:{let3}3")
+        ws[f"{let1}3"].value = f"{c_name} ({short_code})"
+        _style_range(ws, f"{let1}3:{let3}3", font=font_th, fill=fill_navy, border=thin_border, alignment=align_center)
+
+        # Row 4: Column Sub-headers
+        is_lab = _is_practical(course)
+        sub_cols = [
+            ("SEE(Pr)" if is_lab else "SEE", let1),
+            ("IA(Pr)" if is_lab else "IA", let2),
+            ("Total\n(SEE+IA)", let3)
+        ]
+        for label, ltr in sub_cols:
+            c_sh = ws[f"{ltr}4"]
+            c_sh.value = label
+            c_sh.fill = fill_blue
+            c_sh.font = font_sub_th
+            c_sh.alignment = align_center
+            c_sh.border = thin_border
+
+    # Summary Headers (merged rows 3 to 4)
+    sum_headers = [
+        (col_tot_marks, "Total\nMarks\n(SEE+IA)"),
+        (col_max_marks, "Max\nMarks"),
+        (col_pct, "Overall %\n(Total/Max)"),
+        (col_sgpa, "SGPA"),
+        (col_cgpa, "CGPA"),
+        (col_result, "Result"),
     ]
+    for col_idx, h_title in sum_headers:
+        ltr = get_column_letter(col_idx)
+        ws.merge_cells(f"{ltr}3:{ltr}4")
+        ws[f"{ltr}3"].value = h_title
+        _style_range(ws, f"{ltr}3:{ltr}4", font=font_th, fill=fill_navy, border=thin_border, alignment=align_center)
 
-    for i, (label, val, fmt) in enumerate(kpis, start=5):
-        ws.row_dimensions[i].height = 20
-        # Label cell (Cols A-B merged)
-        ws.merge_cells(start_row=i, start_column=1, end_row=i, end_column=2)
-        lbl_cell = ws.cell(row=i, column=1, value=label)
-        lbl_cell.font = Font(name="Segoe UI", size=9, bold=True, color=CLR_TEXT_DARK)
-        lbl_cell.fill = PatternFill(start_color=CLR_ALT_ROW if i % 2 == 0 else CLR_WHITE, fill_type="solid")
-        lbl_cell.alignment = Alignment(horizontal="left", vertical="center", indent=1)
-        lbl_cell.border = _get_border()
-        ws.cell(row=i, column=2).border = _get_border()
+    # 5. Student Rows
+    start_row = 5
+    for idx, s in enumerate(students):
+        r = start_row + idx
 
-        # Value cell (Col C)
-        val_cell = ws.cell(row=i, column=3, value=val)
-        val_cell.font = Font(name="Segoe UI", size=9.5, bold=True, color=CLR_PRIMARY_NAVY)
-        val_cell.fill = PatternFill(start_color=CLR_ALT_ROW if i % 2 == 0 else CLR_WHITE, fill_type="solid")
-        val_cell.alignment = Alignment(horizontal="right", vertical="center")
-        val_cell.number_format = fmt
-        val_cell.border = _get_border()
+        # Sl No
+        ws.cell(r, 1, value=idx + 1).alignment = align_center
+        ws.cell(r, 1).font = font_data
+        ws.cell(r, 1).border = thin_border
 
-    # ── Section 2: Grade Distribution Table (Columns E-G) ──
-    ws.merge_cells("E4:G4")
-    grd_hdr = ws["E4"]
-    grd_hdr.value = "GRADE FREQUENCY DISTRIBUTION"
-    grd_hdr.font = Font(name="Segoe UI", size=10, bold=True, color=CLR_WHITE)
-    grd_hdr.fill = PatternFill(start_color=CLR_INDIGO, end_color=CLR_INDIGO, fill_type="solid")
-    grd_hdr.alignment = Alignment(horizontal="center", vertical="center")
+        # Register No
+        ws.cell(r, 2, value=s.get("usn", "")).alignment = align_center
+        ws.cell(r, 2).font = font_data
+        ws.cell(r, 2).border = thin_border
 
-    sub_hdrs = ["Grade", "Count", "Percentage"]
-    for c_idx, h_text in enumerate(sub_hdrs, start=5):
-        c = ws.cell(row=5, column=c_idx, value=h_text)
-        c.font = Font(name="Segoe UI", size=8.5, bold=True, color=CLR_TEXT_DARK)
-        c.fill = PatternFill(start_color=CLR_PRIMARY_LIGHT, fill_type="solid")
-        c.alignment = Alignment(horizontal="center", vertical="center")
-        c.border = _get_border()
-    ws.row_dimensions[5].height = 18
+        # Student Name
+        ws.cell(r, 3, value=s.get("name", "")).alignment = align_left
+        ws.cell(r, 3).font = font_data
+        ws.cell(r, 3).border = thin_border
 
-    # Grade counting with robust regex normalization
-    standard_grades = ["O", "A+", "A", "B+", "B", "C", "P", "F"]
-    if "Term Grade" in df.columns:
-        grade_series = df["Term Grade"].apply(extract_letter_grade)
-        grade_counts = grade_series.value_counts().to_dict()
-    else:
-        grade_counts = {}
+        # Subject Marks
+        for i, course in enumerate(courses):
+            code = course["code"]
+            if code not in s.get("subjects", {}):
+                # Student did not take this elective/optional course
+                col1 = start_sub_col + (i * 3)
+                col2 = col1 + 1
+                col3 = col1 + 2
+                for ci in (col1, col2, col3):
+                    c = ws.cell(r, ci, value="-")
+                    c.alignment = align_center
+                    c.font = font_data
+                    c.border = thin_border
+                continue
 
-    for g_idx, grade in enumerate(standard_grades, start=6):
-        ws.row_dimensions[g_idx].height = 19
-        cnt = grade_counts.get(grade, 0)
-        pct = (cnt / total_students) if total_students > 0 else 0.0
-        bg = CLR_ALT_ROW if g_idx % 2 == 0 else CLR_WHITE
+            sub_rec = s.get("subjects", {}).get(code, {})
+            status = sub_rec.get("status", "PASS")
+            failed_sub = status == "FAIL"
 
-        # Grade
-        g_c = ws.cell(row=g_idx, column=5, value=grade)
-        g_c.font = Font(name="Segoe UI", size=9, bold=True, color=CLR_TEXT_DARK)
-        g_c.alignment = Alignment(horizontal="center", vertical="center")
-        g_c.fill = PatternFill(start_color=bg, fill_type="solid")
-        g_c.border = _get_border()
+            fill_sub = fill_fail if failed_sub else fill_pass
+            font_sub = font_fail if failed_sub else font_data
 
-        # Count
-        cnt_c = ws.cell(row=g_idx, column=6, value=cnt)
-        cnt_c.font = Font(name="Segoe UI", size=9, color=CLR_TEXT_DARK)
-        cnt_c.alignment = Alignment(horizontal="right", vertical="center")
-        cnt_c.fill = PatternFill(start_color=bg, fill_type="solid")
-        cnt_c.number_format = "#,##0"
-        cnt_c.border = _get_border()
+            col1 = start_sub_col + (i * 3)
+            col2 = col1 + 1
+            col3 = col1 + 2
+            let1, let2 = get_column_letter(col1), get_column_letter(col2)
 
-        # Percent
-        pct_c = ws.cell(row=g_idx, column=7, value=pct)
-        pct_c.font = Font(name="Segoe UI", size=9, color=CLR_TEXT_MUTED)
-        pct_c.alignment = Alignment(horizontal="right", vertical="center")
-        pct_c.fill = PatternFill(start_color=bg, fill_type="solid")
-        pct_c.number_format = "0.0%"
-        pct_c.border = _get_border()
+            see_val = sub_rec.get("theory")
+            ia_val = sub_rec.get("internal")
 
-    # ── Section 3: Toppers Leaderboard (Top 10) ──
-    top_start_row = 15
-    ws.merge_cells(f"A{top_start_row}:G{top_start_row}")
-    top_hdr = ws[f"A{top_start_row}"]
-    top_hdr.value = "SEMESTER TOPPERS & RANK HOLDERS (TOP 10)"
-    top_hdr.font = Font(name="Segoe UI", size=10, bold=True, color=CLR_WHITE)
-    top_hdr.fill = PatternFill(start_color=CLR_PRIMARY_NAVY, end_color=CLR_PRIMARY_NAVY, fill_type="solid")
-    top_hdr.alignment = Alignment(horizontal="left", vertical="center", indent=1)
-    ws.row_dimensions[top_start_row].height = 24
+            c1 = ws.cell(r, col1, value=see_val if see_val is not None else "")
+            c2 = ws.cell(r, col2, value=ia_val if ia_val is not None else "")
+            c3 = ws.cell(r, col3, value=f"={let1}{r}+{let2}{r}")
 
-    top_cols = ["Rank", "Serial", "USN", "Student Name", "Result", "Grade", "SGPA"]
-    sub_row = top_start_row + 1
-    ws.row_dimensions[sub_row].height = 20
-    for idx, col_name in enumerate(top_cols, start=1):
-        c = ws.cell(row=sub_row, column=idx, value=col_name)
-        c.font = Font(name="Segoe UI", size=9, bold=True, color=CLR_TEXT_DARK)
-        c.fill = PatternFill(start_color=CLR_PRIMARY_LIGHT, fill_type="solid")
-        c.alignment = Alignment(horizontal="center" if idx != 4 else "left", vertical="center")
-        c.border = _get_header_border()
+            for c in (c1, c2, c3):
+                c.alignment = align_center
+                c.fill = fill_sub
+                c.font = font_sub
+                c.border = thin_border
 
-    toppers_df = df.head(10) if not df.empty else pd.DataFrame()
-    for t_idx, row in toppers_df.iterrows():
-        curr_row = sub_row + 1 + t_idx
-        ws.row_dimensions[curr_row].height = 20
-        rank_num = t_idx + 1
+        # Total Marks Formula (summing each subject's total cell)
+        tot_let = get_column_letter(col_tot_marks)
+        tot_formula = "=SUM(" + ",".join(f"{ltr}{r}" for ltr in sub_total_col_letters) + ")"
+        c_tot = ws.cell(r, col_tot_marks, value=tot_formula)
+        c_tot.alignment = align_center
+        c_tot.font = font_data
+        c_tot.border = thin_border
 
-        # Subtle podium shading for top 3
-        if rank_num == 1:
-            row_bg = CLR_GOLD_BG
-        elif rank_num == 2:
-            row_bg = CLR_SILVER_BG
-        elif rank_num == 3:
-            row_bg = CLR_BRONZE_BG
+        # Max Marks
+        max_t = s.get("max_total") or (len(courses) * 100 - sum(50 for c in courses if _is_practical(c))) or 700
+        max_let = get_column_letter(col_max_marks)
+        c_max = ws.cell(r, col_max_marks, value=int(max_t))
+        c_max.alignment = align_center
+        c_max.font = font_data
+        c_max.border = thin_border
+
+        # Overall % Formula
+        pct_formula = f"=ROUND({tot_let}{r}/{max_let}{r}*100,2)"
+        c_pct = ws.cell(r, col_pct, value=pct_formula)
+        c_pct.alignment = align_center
+        c_pct.font = font_data
+        c_pct.border = thin_border
+
+        # SGPA
+        c_sgpa = ws.cell(r, col_sgpa, value=s.get("sgpa") or "")
+        c_sgpa.alignment = align_center
+        c_sgpa.font = font_data
+        c_sgpa.border = thin_border
+
+        # CGPA
+        c_cgpa = ws.cell(r, col_cgpa, value=s.get("cgpa") or "")
+        c_cgpa.alignment = align_center
+        c_cgpa.font = font_data
+        c_cgpa.border = thin_border
+
+        # Result
+        res_val = s.get("result", "PASS").upper()
+        c_res = ws.cell(r, col_result, value=res_val)
+        c_res.alignment = align_center
+        c_res.border = thin_border
+        if res_val == "PASS":
+            c_res.fill = fill_pass
+            c_res.font = font_pass
         else:
-            row_bg = CLR_ALT_ROW if curr_row % 2 == 0 else CLR_WHITE
+            c_res.fill = fill_fail
+            c_res.font = font_fail
 
-        values = [
-            f"#{rank_num}",
-            str(row.get("Serial", "")),
-            str(row.get("USN", "")),
-            str(row.get("Name", "")),
-            str(row.get("Result", "")),
-            clean_term_grade(row.get("Term Grade", "")),
-            float(row.get("SGPA", 0.0)),
-        ]
+    end_student_row = start_row + num_students - 1 if num_students else start_row
 
-        for col_idx, val in enumerate(values, start=1):
-            cell = ws.cell(row=curr_row, column=col_idx, value=val)
-            cell.font = Font(name="Segoe UI", size=9, bold=(rank_num <= 3 or col_idx == 7))
-            cell.fill = PatternFill(start_color=row_bg, fill_type="solid")
-            cell.border = _get_border()
+    # 6. Subject-Wise Result Analysis Table
+    r_sub = end_student_row + 3
+    ws.row_dimensions[r_sub].height = 16
+    ws.merge_cells(f"A{r_sub}:G{r_sub}")
+    t_sub = ws[f"A{r_sub}"]
+    t_sub.value = "SUBJECT-WISE RESULT ANALYSIS"
+    t_sub.font = font_sec_head
+    t_sub.alignment = align_left
 
-            if col_idx == 4:
-                cell.alignment = Alignment(horizontal="left", vertical="center", indent=1)
-            elif col_idx == 7:
-                cell.alignment = Alignment(horizontal="right", vertical="center")
-                cell.number_format = "0.00"
-            else:
-                cell.alignment = Alignment(horizontal="center", vertical="center")
+    r_sub_hdr = r_sub + 1
+    ws.row_dimensions[r_sub_hdr].height = 26
+    sub_headers = ["Sl No", "Course Code", "Subject Name", "Appeared", "Passed", "Failed", "Pass %"]
+    for ci, h in enumerate(sub_headers, 1):
+        cell = ws.cell(r_sub_hdr, ci, value=h)
+        cell.fill = fill_navy
+        cell.font = font_th
+        cell.alignment = align_center
+        cell.border = thin_border
 
-    _autofit_columns(ws, min_width=12, max_width=35)
+    sub_start_data_row = r_sub_hdr + 1
+    for i, course in enumerate(courses):
+        curr_r = sub_start_data_row + i
+        code = course["code"]
+        short_code = _get_short_code(code)
+        c_name = course.get("name", short_code)
 
+        app_count = sum(1 for st in students if code in st.get("subjects", {}))
+        pass_count = sum(1 for st in students if st.get("subjects", {}).get(code, {}).get("status") == "PASS")
+        fail_count = sum(1 for st in students if st.get("subjects", {}).get(code, {}).get("status") == "FAIL")
 
-def _create_students_sheet(wb, df, courses):
-    ws = wb.create_sheet(title="Student Master List")
-    _enable_gridlines(ws)
+        ws.cell(curr_r, 1, value=i + 1).alignment = align_center
+        ws.cell(curr_r, 2, value=short_code).alignment = align_center
+        ws.cell(curr_r, 3, value=c_name).alignment = align_left
+        ws.cell(curr_r, 4, value=app_count).alignment = align_center
+        ws.cell(curr_r, 5, value=pass_count).alignment = align_center
+        ws.cell(curr_r, 6, value=fail_count).alignment = align_center
 
-    if df.empty:
-        ws.append(["No student data available"])
-        return
+        pct_form = f"=ROUND(E{curr_r}/D{curr_r}*100,2)" if app_count else "-"
+        ws.cell(curr_r, 7, value=pct_form).alignment = align_center
 
-    # Select and order columns cleanly
-    core_cols = ["Rank", "Serial", "USN", "Name", "Result", "Term Grade", "SGPA", "CGPA", "Total Marks", "Max Total"]
-    available_core = [c for c in core_cols if c in df.columns]
+        for ci in range(1, 8):
+            ws.cell(curr_r, ci).font = font_data
+            ws.cell(curr_r, ci).border = thin_border
 
-    # Include subject columns (GP and CP)
-    subject_cols = [c for c in df.columns if c.endswith("_GP") or c.endswith("_CP") or c.endswith("_Cr")]
-    final_cols = available_core + subject_cols
+    # Overall Subject Summary Row
+    sub_end_data_row = sub_start_data_row + num_courses - 1
+    ov_row = sub_end_data_row + 1
+    ws.cell(ov_row, 3, value="OVERALL (all subjects)").alignment = align_left
+    ws.cell(ov_row, 3).font = font_data_bold
 
-    # Add header row
-    ws.append(final_cols)
-    ws.row_dimensions[1].height = 26
+    tot_app = f"=SUM(D{sub_start_data_row}:D{sub_end_data_row})"
+    tot_pass = f"=SUM(E{sub_start_data_row}:E{sub_end_data_row})"
+    tot_fail = f"=SUM(F{sub_start_data_row}:F{sub_end_data_row})"
+    ov_pct = f"=ROUND(E{ov_row}/D{ov_row}*100,2)"
 
-    # Style header row
-    for col_idx in range(1, len(final_cols) + 1):
-        cell = ws.cell(row=1, column=col_idx)
-        cell.font = Font(name="Segoe UI", size=9.5, bold=True, color=CLR_WHITE)
-        cell.fill = PatternFill(start_color=CLR_PRIMARY_NAVY, fill_type="solid")
-        cell.alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
-        cell.border = _get_header_border()
+    ws.cell(ov_row, 4, value=tot_app).alignment = align_center
+    ws.cell(ov_row, 5, value=tot_pass).alignment = align_center
+    ws.cell(ov_row, 6, value=tot_fail).alignment = align_center
+    ws.cell(ov_row, 7, value=ov_pct).alignment = align_center
 
-    # Append data rows
-    for r_idx, (_, row) in enumerate(df[final_cols].iterrows(), start=2):
-        ws.row_dimensions[r_idx].height = 20
-        is_alt = (r_idx % 2 == 0)
-        row_bg = CLR_ALT_ROW if is_alt else CLR_WHITE
+    for ci in range(1, 8):
+        ws.cell(ov_row, ci).font = font_data_bold
+        ws.cell(ov_row, ci).border = thin_border
 
-        res_val = str(row.get("Result", "")).upper()
+    # 7. Overall Class Result Summary Table
+    r_cls = ov_row + 3
+    ws.row_dimensions[r_cls].height = 16
+    ws.merge_cells(f"A{r_cls}:G{r_cls}")
+    t_cls = ws[f"A{r_cls}"]
+    t_cls.value = "OVERALL CLASS RESULT SUMMARY"
+    t_cls.font = font_sec_head
+    t_cls.alignment = align_left
 
-        for c_idx, col_name in enumerate(final_cols, start=1):
-            val = row[col_name]
-            if col_name == "Term Grade":
-                val = clean_term_grade(val)
-            elif pd.isna(val):
-                val = ""
+    r_cls_hdr = r_cls + 1
+    ws.row_dimensions[r_cls_hdr].height = 26
+    cls_headers = ["Sl No", "Category", "No. of Students", "% of Total"]
+    for ci, h in enumerate(cls_headers, 1):
+        cell = ws.cell(r_cls_hdr, ci, value=h)
+        cell.fill = fill_navy
+        cell.font = font_th
+        cell.alignment = align_center
+        cell.border = thin_border
 
-            cell = ws.cell(row=r_idx, column=c_idx, value=val)
-            cell.font = Font(name="Segoe UI", size=9, color=CLR_TEXT_DARK)
-            cell.fill = PatternFill(start_color=row_bg, fill_type="solid")
-            cell.border = _get_border()
+    # Tiers
+    dist_count = sum(1 for st in students if st.get("percentage") and st["percentage"] >= 70)
+    fc_count = sum(1 for st in students if st.get("percentage") and 60 <= st["percentage"] < 70)
+    sc_count = sum(1 for st in students if st.get("percentage") and 35 <= st["percentage"] < 60)
+    fail_35_count = sum(1 for st in students if st.get("percentage") and st["percentage"] < 35)
 
-            # Alignments & Number formats
-            if col_name in ["Rank", "Serial", "USN", "Term Grade"]:
-                cell.alignment = Alignment(horizontal="center", vertical="center")
-            elif col_name == "Name":
-                cell.alignment = Alignment(horizontal="left", vertical="center", indent=1)
-            elif col_name in ["SGPA", "CGPA"]:
-                cell.alignment = Alignment(horizontal="right", vertical="center")
-                cell.number_format = "0.00"
-            elif col_name in ["Total Marks", "Max Total"] or col_name.endswith("_CP"):
-                cell.alignment = Alignment(horizontal="right", vertical="center")
-                cell.number_format = "#,##0"
-            elif col_name.endswith("_GP") or col_name.endswith("_Cr"):
-                cell.alignment = Alignment(horizontal="right", vertical="center")
-                cell.number_format = "0.0"
-            elif col_name == "Result":
-                cell.alignment = Alignment(horizontal="center", vertical="center")
-                # Highlight PASS vs FAIL
-                if res_val == "PASS":
-                    cell.fill = PatternFill(start_color=CLR_PASS_BG, fill_type="solid")
-                    cell.font = Font(name="Segoe UI", size=9, bold=True, color=CLR_PASS_FG)
-                elif "FAIL" in res_val:
-                    cell.fill = PatternFill(start_color=CLR_FAIL_BG, fill_type="solid")
-                    cell.font = Font(name="Segoe UI", size=9, bold=True, color=CLR_FAIL_FG)
-                elif "PROMOTED" in res_val:
-                    cell.fill = PatternFill(start_color=CLR_PROMOTED_BG, fill_type="solid")
-                    cell.font = Font(name="Segoe UI", size=9, bold=True, color=CLR_PROMOTED_FG)
+    tot_appeared = num_students
+    tot_passed = sum(1 for st in students if st.get("result") == "PASS")
+    tot_failed = sum(1 for st in students if st.get("result") != "PASS")
 
-    # Freeze header row & apply Excel AutoFilter
-    ws.freeze_panes = "A2"
-    ws.auto_filter.ref = ws.dimensions
-    _autofit_columns(ws, min_width=10, max_width=32)
-
-
-def _create_subjects_sheet(wb, df, courses):
-    ws = wb.create_sheet(title="Subject Performance")
-    _enable_gridlines(ws)
-
-    headers = [
-        "Course Code", "Course Name", "Total Appeared",
-        "Passed", "Failed", "Pass Rate", "Average GP", "Max GP"
+    tier_rows = [
+        (1, "Distinction (>=70%)", dist_count),
+        (2, "First Class (60-69%)", fc_count),
+        (3, "Second Class (35-59%)", sc_count),
+        (4, "Fail/Below 35%", fail_35_count),
     ]
-    ws.append(headers)
-    ws.row_dimensions[1].height = 26
 
-    # Style Header
-    for col_idx in range(1, len(headers) + 1):
-        cell = ws.cell(row=1, column=col_idx)
-        cell.font = Font(name="Segoe UI", size=9.5, bold=True, color=CLR_WHITE)
-        cell.fill = PatternFill(start_color=CLR_INDIGO, fill_type="solid")
-        cell.alignment = Alignment(horizontal="center", vertical="center")
-        cell.border = _get_header_border()
+    r_tier_start = r_cls_hdr + 1
+    for i, (sl, cat, cnt) in enumerate(tier_rows):
+        cur_r = r_tier_start + i
+        ws.cell(cur_r, 1, value=sl).alignment = align_center
+        ws.cell(cur_r, 2, value=cat).alignment = align_left
+        ws.cell(cur_r, 3, value=cnt).alignment = align_center
+        pct_expr = f"=ROUND(C{cur_r}/{tot_appeared}*100,2)" if tot_appeared else 0
+        ws.cell(cur_r, 4, value=pct_expr).alignment = align_center
 
-    # Match courses with per-subject GP columns
-    course_name_map = {c.get("code", ""): c.get("name", "") for c in courses}
-    gp_cols = [c for c in df.columns if c.endswith("_GP")] if not df.empty else []
+        for ci in range(1, 5):
+            ws.cell(cur_r, ci).font = font_data
+            ws.cell(cur_r, ci).border = thin_border
 
-    row_num = 2
-    for col in gp_cols:
-        code = col.replace("_GP", "")
-        name = course_name_map.get(code, "Course " + code)
-        series = df[col]
-        appeared = len(series[series > 0])
-        passed = len(series[series >= 4.0]) # Standard BU passing GP threshold
-        failed = appeared - passed
-        pass_rate = (passed / appeared) if appeared > 0 else 0.0
-        avg_gp = series[series > 0].mean() if appeared > 0 else 0.0
-        max_gp = series.max() if appeared > 0 else 0.0
+    # Final summary rows
+    r_app = r_tier_start + len(tier_rows)
+    r_pass = r_app + 1
+    r_fail = r_pass + 1
 
-        is_alt = (row_num % 2 == 0)
-        row_bg = CLR_ALT_ROW if is_alt else CLR_WHITE
-        ws.row_dimensions[row_num].height = 20
+    ws.cell(r_app, 2, value="Total Students Appeared").alignment = align_left
+    ws.cell(r_app, 3, value=tot_appeared).alignment = align_center
 
-        vals = [
-            (code, "center", "@"),
-            (name, "left", "@"),
-            (appeared, "right", "#,##0"),
-            (passed, "right", "#,##0"),
-            (failed, "right", "#,##0"),
-            (pass_rate, "right", "0.0%"),
-            (avg_gp, "right", "0.00"),
-            (max_gp, "right", "0.00"),
-        ]
+    ws.cell(r_pass, 2, value="Total Passed (Overall Result)").alignment = align_left
+    ws.cell(r_pass, 3, value=tot_passed).alignment = align_center
+    ws.cell(r_pass, 4, value=f"=ROUND(C{r_pass}/{tot_appeared}*100,2)" if tot_appeared else 0).alignment = align_center
 
-        for c_idx, (val, align, fmt) in enumerate(vals, start=1):
-            cell = ws.cell(row=row_num, column=c_idx, value=val)
-            cell.font = Font(name="Segoe UI", size=9, color=CLR_TEXT_DARK)
-            cell.fill = PatternFill(start_color=row_bg, fill_type="solid")
-            cell.border = _get_border()
-            cell.alignment = Alignment(horizontal=align, vertical="center", indent=(1 if align == "left" else 0))
-            cell.number_format = fmt
+    ws.cell(r_fail, 2, value="Total Failed (Overall Result)").alignment = align_left
+    ws.cell(r_fail, 3, value=tot_failed).alignment = align_center
 
-            # Soft color on pass rate
-            if c_idx == 6:
-                if pass_rate >= 0.8:
-                    cell.font = Font(name="Segoe UI", size=9, bold=True, color=CLR_PASS_FG)
-                elif pass_rate < 0.5:
-                    cell.font = Font(name="Segoe UI", size=9, bold=True, color=CLR_FAIL_FG)
+    for r_idx in (r_app, r_pass, r_fail):
+        for ci in range(1, 5):
+            cell = ws.cell(r_idx, ci)
+            cell.font = font_data_bold
+            cell.border = thin_border
 
-        row_num += 1
+    # 8. Set Column Widths to match institutional layout
+    ws.column_dimensions["A"].width = 6.0
+    ws.column_dimensions["B"].width = 24.0
+    ws.column_dimensions["C"].width = 26.0
 
-    ws.freeze_panes = "A2"
-    ws.auto_filter.ref = ws.dimensions
-    _autofit_columns(ws, min_width=12, max_width=40)
+    for i in range(num_courses):
+        col1 = start_sub_col + (i * 3)
+        col2 = col1 + 1
+        col3 = col1 + 2
+        ws.column_dimensions[get_column_letter(col1)].width = 8.0
+        ws.column_dimensions[get_column_letter(col2)].width = 7.5
+        ws.column_dimensions[get_column_letter(col3)].width = 10.0
 
+    ws.column_dimensions[get_column_letter(col_tot_marks)].width = 11.0
+    ws.column_dimensions[get_column_letter(col_max_marks)].width = 9.0
+    ws.column_dimensions[get_column_letter(col_pct)].width = 11.0
+    ws.column_dimensions[get_column_letter(col_sgpa)].width = 7.0
+    ws.column_dimensions[get_column_letter(col_cgpa)].width = 7.0
+    ws.column_dimensions[get_column_letter(col_result)].width = 9.0
 
-def _create_courses_sheet(wb, courses):
-    ws = wb.create_sheet(title="Course Catalog")
-    _enable_gridlines(ws)
-
-    headers = ["Sl. No", "Course Code", "Course Name"]
-    ws.append(headers)
-    ws.row_dimensions[1].height = 26
-
-    for col_idx in range(1, len(headers) + 1):
-        cell = ws.cell(row=1, column=col_idx)
-        cell.font = Font(name="Segoe UI", size=9.5, bold=True, color=CLR_WHITE)
-        cell.fill = PatternFill(start_color=CLR_PRIMARY_NAVY, fill_type="solid")
-        cell.alignment = Alignment(horizontal="center", vertical="center")
-        cell.border = _get_header_border()
-
-    for idx, c in enumerate(courses, start=1):
-        row_idx = idx + 1
-        ws.row_dimensions[row_idx].height = 20
-        row_bg = CLR_ALT_ROW if row_idx % 2 == 0 else CLR_WHITE
-
-        c1 = ws.cell(row=row_idx, column=1, value=c.get("sl_no", idx))
-        c1.alignment = Alignment(horizontal="center", vertical="center")
-
-        c2 = ws.cell(row=row_idx, column=2, value=c.get("code", ""))
-        c2.alignment = Alignment(horizontal="center", vertical="center")
-        c2.font = Font(name="Segoe UI", size=9, bold=True, color=CLR_PRIMARY_NAVY)
-
-        c3 = ws.cell(row=row_idx, column=3, value=c.get("name", ""))
-        c3.alignment = Alignment(horizontal="left", vertical="center", indent=1)
-
-        for cell in [c1, c2, c3]:
-            cell.fill = PatternFill(start_color=row_bg, fill_type="solid")
-            cell.border = _get_border()
-            if cell != c2:
-                cell.font = Font(name="Segoe UI", size=9, color=CLR_TEXT_DARK)
-
-    ws.freeze_panes = "A2"
-    _autofit_columns(ws, min_width=12, max_width=50)
+    ws.views.sheetView[0].showGridLines = True
