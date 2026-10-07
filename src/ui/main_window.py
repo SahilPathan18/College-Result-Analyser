@@ -196,16 +196,6 @@ class AppShell(ctk.CTkFrame):
         top.grid(row=0, column=0, sticky="ew")
         top.pack_propagate(False)
         Line(top, T.BORDER).pack(side="bottom", fill="x")
-        left = ctk.CTkFrame(top, fg_color="transparent")
-        left.pack(side="left", padx=(24, 0), fill="y")
-        self.title_lbl = ctk.CTkLabel(left, text=TITLES["dashboard"], font=F("ui7", 17), text_color=T.TEXT, anchor="w")
-        self.title_lbl.pack(anchor="w", pady=(7, 0))
-        meta = self.data.get("metadata", {})
-        fmt = self.data.get("format_type", "Official Analysis")
-        prog_sem = f"{meta.get('program', 'Degree')} {('Semester ' + meta.get('semester')) if meta.get('semester') else ''}".strip()
-        sub_title = f"{prog_sem} · {fmt}" if prog_sem else fmt
-        ctk.CTkLabel(left, text=sub_title, font=F("ui", 11), text_color=T.MUTED,
-                     anchor="w").pack(anchor="w")
         acts = ctk.CTkFrame(top, fg_color="transparent")
         acts.pack(side="right", padx=(0, 24), fill="y")
         AppButton(acts, "Excel Report", "accent", self.app.export_excel, image=T.icon("download_white", 16),
