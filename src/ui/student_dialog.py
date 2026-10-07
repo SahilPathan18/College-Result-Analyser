@@ -15,7 +15,7 @@ def _val(v):
 def open_student_dialog(parent, student: dict, subjects_meta: list[dict]):
     win = ctk.CTkToplevel(parent)
     win.withdraw()
-    win.title("Marks Analyser  |  Student Result Card")
+    win.title("Result Analyzer  |  Student Result Card")
     win.configure(fg_color="#ffffff")
     win.resizable(False, False)
     T.set_window_icon(win)

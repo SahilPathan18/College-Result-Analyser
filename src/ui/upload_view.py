@@ -49,7 +49,7 @@ class UploadView(tk.Canvas):
                                  border_width=1, border_color="#334155")
         self.card.bind("<Configure>", lambda e: self._schedule_paint(), add="+")
         ctk.CTkLabel(self.card, text="", image=T.logo(72)).pack(pady=(44, 0))
-        ctk.CTkLabel(self.card, text="Marks Analyser", font=F("brand", 36), text_color=T.TEXT
+        ctk.CTkLabel(self.card, text="Result Analyzer", font=F("brand", 36), text_color=T.TEXT
                      ).pack(pady=(20, 24))
 
         S = scale_of(self)
@@ -68,7 +68,7 @@ class UploadView(tk.Canvas):
         self.error.pack(pady=(10, 0), padx=42)
 
         self.arrow = T.icon("arrow_white", 18)
-        self.btn = AppButton(self.card, "Run Marks Analyser", "primary", self._submit, image=self.arrow,
+        self.btn = AppButton(self.card, "Run Result Analyzer", "primary", self._submit, image=self.arrow,
                              compound="right", height=46, size=15, state="disabled", text_color_disabled="#ffffff")
         self.btn.pack(fill="x", padx=42, pady=(16, 44))
 
@@ -201,7 +201,7 @@ class UploadView(tk.Canvas):
             if self._spin_job:
                 self.after_cancel(self._spin_job)
                 self._spin_job = None
-            self.btn.configure(text="Run Marks Analyser", image=self.arrow, state="normal" if self.path else "disabled")
+            self.btn.configure(text="Run Result Analyzer", image=self.arrow, state="normal" if self.path else "disabled")
 
     def _spin(self):
         if not self._busy:

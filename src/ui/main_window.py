@@ -494,7 +494,7 @@ class MainWindow(ctk.CTk, _DnDBase):
         if self.shell is None:
             self.upload.browse()
             return
-        if confirm and not messagebox.askyesno("Marks Analyser", "Switch to another PDF? The current ledger will be reset.",
+        if confirm and not messagebox.askyesno("Result Analyzer", "Switch to another PDF? The current ledger will be reset.",
                                               parent=self):
             return
         self.close_ledger()
@@ -502,14 +502,38 @@ class MainWindow(ctk.CTk, _DnDBase):
     # ---- Excel export -------------------------------------------------------------------------
     def export_excel(self):
         if not self.data:
-            messagebox.showinfo("Marks Analyser", "Please upload a result PDF first.", parent=self)
+            messagebox.showinfo("Result Analyzer", "Please upload a result PDF first.", parent=self)
             return
-        core.OUTPUT_DIR.mkdir(exist_ok=True)
+
+        # Determine intuitive initial directory:
+        # 1. Directory last chosen by user during this session
+        # 2. Directory of the currently loaded PDF ledger
+        # 3. User's Desktop
+        # 4. User's Downloads folder
+        init_dir = getattr(self, "_last_export_dir", None)
+        if not init_dir or not Path(init_dir).exists():
+            pdf_path = getattr(self.upload, "path", None)
+            if pdf_path and Path(pdf_path).parent.exists():
+                init_dir = str(Path(pdf_path).parent)
+            else:
+                desktop = Path.home() / "Desktop"
+                downloads = Path.home() / "Downloads"
+                init_dir = str(desktop if desktop.exists() else (downloads if downloads.exists() else Path.home()))
+
+        default_name = core.default_export_name(self.data.get("metadata") if self.data else None)
+
         path = filedialog.asksaveasfilename(
-            parent=self, title="Save Excel Report", defaultextension=".xlsx", initialdir=str(core.OUTPUT_DIR),
-            initialfile=core.default_export_name(self.data.get("metadata") if self.data else None), filetypes=[("Excel Workbook", "*.xlsx")])
+            parent=self,
+            title="Save Excel Report - Select Location",
+            defaultextension=".xlsx",
+            initialdir=init_dir,
+            initialfile=default_name,
+            filetypes=[("Excel Workbook (*.xlsx)", "*.xlsx"), ("All Files (*.*)", "*.*")],
+        )
         if not path:
             return
+
+        self._last_export_dir = str(Path(path).parent)
         self.configure(cursor="watch")
         self.update_idletasks()
         try:
@@ -524,7 +548,7 @@ class MainWindow(ctk.CTk, _DnDBase):
             return
         finally:
             self.configure(cursor="")
-        if messagebox.askyesno("Excel report saved", f"Report saved to:\n{saved}\n\nOpen it now?", parent=self):
+        if messagebox.askyesno("Excel Report Saved", f"Report saved successfully to:\n\n{saved}\n\nOpen it now?", parent=self):
             self._open_file(saved)
 
     @staticmethod
@@ -549,6 +573,6 @@ class MainWindow(ctk.CTk, _DnDBase):
             pass
         print(text, file=sys.stderr)
         try:
-            messagebox.showerror("Marks Analyser", f"Something went wrong:\n\n{val}\n\n(Details saved to error.log)", parent=self)
+            messagebox.showerror("Result Analyzer", f"Something went wrong:\n\n{val}\n\n(Details saved to error.log)", parent=self)
         except Exception:
             pass
