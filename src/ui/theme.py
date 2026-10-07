@@ -20,12 +20,12 @@ if getattr(sys, "frozen", False):
     exe_dir = Path(sys.executable).parent
     meipass = Path(getattr(sys, "_MEIPASS", exe_dir))
     candidates = [
-        exe_dir / "assets",
         exe_dir / "_internal" / "assets",
-        meipass / "assets",
         meipass / "_internal" / "assets",
+        exe_dir / "assets",
+        meipass / "assets",
     ]
-    ASSETS = next((c for c in candidates if c.exists()), exe_dir / "assets")
+    ASSETS = next((c for c in candidates if (c / "emoji").exists()), next((c for c in candidates if c.exists()), exe_dir / "assets"))
     ROOT_DIR = exe_dir
 else:
     ROOT_DIR = Path(__file__).resolve().parent.parent
