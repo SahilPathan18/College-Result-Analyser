@@ -249,31 +249,6 @@ class AppShell(ctk.CTkFrame):
         self.viewport.grid_rowconfigure(0, weight=1)
         self.viewport.grid_columnconfigure(0, weight=1)
 
-        bar = ctk.CTkFrame(ws, height=28, fg_color=T.WIN_BG, corner_radius=0)
-        bar.grid(row=3, column=0, sticky="ew")
-        bar.pack_propagate(False)
-        Line(bar, T.blend("#ffffff", .08, T.WIN_BG)).pack(side="top", fill="x")
-        div, grey, white = T.blend("#ffffff", .15, T.WIN_BG), T.LIGHT, "#cbd5e1"
-        L = ctk.CTkFrame(bar, fg_color="transparent")
-        L.pack(side="left", padx=(16, 0))
-        ctk.CTkFrame(L, width=7, height=7, fg_color=T.GREEN, corner_radius=4).pack(side="left", padx=(0, 8))
-        self.status_text = ctk.CTkLabel(L, text="Ready", font=F("ui", 11), text_color=grey)
-        self.status_text.pack(side="left")
-        ctk.CTkLabel(L, text="  |  ", font=F("ui", 11), text_color=div).pack(side="left")
-        raw_fname = str(self.data.get("filename") or "-")
-        disp_fname = raw_fname if len(raw_fname) <= 20 else raw_fname[:17] + "..."
-        rich(L, [("Ledger: ", "ui", 11, grey), (disp_fname, "ui7", 11, grey)]).pack(side="left")
-        ctk.CTkLabel(L, text="  |  ", font=F("ui", 11), text_color=div).pack(side="left")
-        rich(L, [("Records: ", "ui", 11, grey), (str(s["total"]), "ui7", 11, grey)]).pack(side="left")
-        R = ctk.CTkFrame(bar, fg_color="transparent")
-        R.pack(side="right", padx=(0, 16))
-        ctk.CTkLabel(R, text="UTF-8", font=F("ui", 11), text_color=grey).pack(side="left")
-        ctk.CTkLabel(R, text="  |  ", font=F("ui", 11), text_color=div).pack(side="left")
-        ctk.CTkLabel(R, text="Result Analyzer", font=F("brand", 11), text_color=white).pack(side="left")
-        C = rich(bar, [("Pass Rate: ", "ui", 11, grey), (f"{s['pass_percentage']}%", "ui7", 11, grey),
-                       ("  ·  ", "ui", 11, div), ("Absent: ", "ui", 11, grey), (str(s["absent"]), "ui7", 11, grey)])
-        C.place(relx=.5, rely=.5, anchor="center")
-
     # ---- navigation ---------------------------------------------------------------------------
     def show(self, key: str):
         if key not in self._panes:
