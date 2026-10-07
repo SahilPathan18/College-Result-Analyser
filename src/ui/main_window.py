@@ -36,7 +36,6 @@ TABS = [  # key, icon kind, icon, label
     ("subjects", "emoji", "chart_up", "Subject Analysis"),
     ("failures", "emoji", "warning", "Failed Students"),
     ("toppers", "emoji", "trophy", "Toppers & Merit"),
-    ("cohort", "emoji", "clipboard", "Backlogs"),
     ("export", "emoji", "inbox", "Export & Reports"),
 ]
 TITLES = {

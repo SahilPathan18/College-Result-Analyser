@@ -49,6 +49,44 @@ def normalize_status(value: str) -> str:
     return {"P": "PASS", "F": "FAIL", "A": "ABSENT"}.get(val, val)
 
 
+def _extract_usn_year(usn: str) -> str | None:
+    if not usn:
+        return None
+    # Standard BU format: U03LX23S0001 (batch year is 23)
+    m = re.search(r"^U\d{2}[A-Za-z]+(\d{2})[A-Za-z]\d+$", usn)
+    if m:
+        return m.group(1)
+    # Generic format: U18BC21S001
+    m = re.search(r"U\d{2}[A-Za-z]{1,4}(\d{2})", usn)
+    if m:
+        return m.group(1)
+    # Prefix year format: 21BCA001
+    m = re.search(r"^(\d{2})[A-Za-z]+", usn)
+    if m:
+        return m.group(1)
+    # Embedded 2-digit batch year: 22BCO101
+    m = re.search(r"\b(\d{2})[A-Za-z]{2,}\d+\b", usn)
+    if m:
+        return m.group(1)
+    return None
+
+
+def _tag_year_cohorts(records: list[dict]) -> None:
+    years = Counter()
+    for r in records:
+        yr = _extract_usn_year(r.get("usn", ""))
+        if yr:
+            years[yr] += 1
+    most_common_year = years.most_common(1)[0][0] if years else None
+
+    for r in records:
+        yr = _extract_usn_year(r.get("usn", ""))
+        if not most_common_year or (yr and yr == most_common_year):
+            r["year_type"] = "Current Year"
+        else:
+            r["year_type"] = "Backlog / Repeater"
+
+
 def _parse_format2(pages: list[str], pdf_path: str | Path) -> tuple[dict, list[str]]:
     """Parse UUCMS / NEP Tabulation Ledger format with USN: candidate blocks."""
     warnings: list[str] = []
@@ -228,24 +266,7 @@ def _parse_format2(pages: list[str], pdf_path: str | Path) -> tuple[dict, list[s
     courses = [{"sl_no": i + 1, "code": c, "name": n} for i, (c, n) in enumerate(seen_courses.items())]
 
     # Cohort segmentation (Current Year vs Backlog / Repeater)
-    years = Counter()
-    for r in records:
-        m = re.search(r"^U\d{2}[A-Za-z]+(\d{2})[A-Za-z]\d+$", r["usn"])
-        if not m:
-            m = re.search(r"U\d{2}[A-Za-z]{1,4}(\d{2})", r["usn"])
-        if m:
-            years[m.group(1)] += 1
-    most_common_year = years.most_common(1)[0][0] if years else None
-
-    for r in records:
-        m = re.search(r"^U\d{2}[A-Za-z]+(\d{2})[A-Za-z]\d+$", r["usn"])
-        if not m:
-            m = re.search(r"U\d{2}[A-Za-z]{1,4}(\d{2})", r["usn"])
-        yr = m.group(1) if m else None
-        if yr and most_common_year and yr == most_common_year:
-            r["year_type"] = "Current Year"
-        else:
-            r["year_type"] = "Backlog / Repeater"
+    _tag_year_cohorts(records)
 
     return {
         "metadata": meta,
@@ -597,24 +618,7 @@ def _parse_format1(pages: list[str], full_text: str, pdf_path: str | Path) -> tu
         courses = [{"sl_no": i + 1, "code": code, "name": code} for i, code in enumerate(sorted(detected_codes))]
 
     # Year Type Inference (Cohort segmentation)
-    years = Counter()
-    for r in records:
-        m = re.search(r"^U\d{2}[A-Za-z]+(\d{2})[A-Za-z]\d+$", r["usn"])
-        if not m:
-            m = re.search(r"U\d{2}[A-Za-z]{1,4}(\d{2})", r["usn"])
-        if m:
-            years[m.group(1)] += 1
-    most_common_year = years.most_common(1)[0][0] if years else None
-
-    for r in records:
-        m = re.search(r"^U\d{2}[A-Za-z]+(\d{2})[A-Za-z]\d+$", r["usn"])
-        if not m:
-            m = re.search(r"U\d{2}[A-Za-z]{1,4}(\d{2})", r["usn"])
-        yr = m.group(1) if m else None
-        if yr and most_common_year and yr == most_common_year:
-            r["year_type"] = "Current Year"
-        else:
-            r["year_type"] = "Backlog / Repeater"
+    _tag_year_cohorts(records)
 
     return {
         "metadata": meta,
@@ -723,20 +727,25 @@ def _parse_format_universal(pages: list[str], full_text: str, pdf_path: str | Pa
 
 
 def build_view_data(parsed_bundle: dict) -> dict:
-    records = parsed_bundle["records"]
+    raw_records = parsed_bundle["records"]
     courses = parsed_bundle["courses"]
     meta = parsed_bundle["metadata"]
     warnings = parsed_bundle.get("warnings", [])
     filename = parsed_bundle.get("filename", "")
 
+    # Exclusively isolate Current Year regular students - repeaters are completely excluded from analysis
+    current = [r for r in raw_records if r.get("year_type") == "Current Year"]
+    if not current:
+        current = raw_records
+
+    records = current
+
     attended = sum(r["result"] in {"PASS", "FAIL"} for r in records)
     passed = sum(r["result"] == "PASS" for r in records)
     failed = sum(r["result"] == "FAIL" for r in records)
     absent = sum(r["result"] == "ABSENT" for r in records)
-    current = [r for r in records if r["year_type"] == "Current Year"]
-    backlog = [r for r in records if r["year_type"] != "Current Year"]
 
-    # Subject Statistics
+    # Subject Statistics (strictly Current Year)
     subject_stats_list = []
     for c in courses:
         code = c["code"]
@@ -760,7 +769,7 @@ def build_view_data(parsed_bundle: dict) -> dict:
             "lowest": min(numeric) if numeric else 0,
         })
 
-    # Subject Failures
+    # Subject Failures (strictly Current Year)
     subject_failures = {}
     for c in courses:
         code = c["code"]
@@ -770,7 +779,7 @@ def build_view_data(parsed_bundle: dict) -> dict:
             if r["subjects"].get(code, {}).get("status") == "FAIL"
         ]
 
-    # Multiple Failures
+    # Multiple Failures (strictly Current Year)
     multiple_failures = []
     for r in records:
         f_courses = [
@@ -785,10 +794,10 @@ def build_view_data(parsed_bundle: dict) -> dict:
                 "subjects": f_courses,
             })
 
-    # Toppers
+    # Toppers (strictly Current Year)
     eligible_toppers = sorted(
         [
-            r for r in current
+            r for r in records
             if r["result"] == "PASS"
             and r["percentage"] is not None
             and all(r["subjects"].get(c["code"], {}).get("status") == "PASS" for c in courses if c["code"] in r["subjects"])
@@ -807,12 +816,12 @@ def build_view_data(parsed_bundle: dict) -> dict:
         for r in eligible_toppers[:10]
     ]
 
-    # Subject-wise Toppers
+    # Subject-wise Toppers (strictly Current Year)
     subject_toppers = []
     for c in courses:
         code = c["code"]
         top_c = sorted(
-            [r for r in current if r["subjects"].get(code, {}).get("status") == "PASS"],
+            [r for r in records if r["subjects"].get(code, {}).get("status") == "PASS"],
             key=lambda r: r["subjects"].get(code, {}).get("total") or 0,
             reverse=True
         )[:3]
@@ -825,11 +834,13 @@ def build_view_data(parsed_bundle: dict) -> dict:
             ]
         })
 
-    # Serial Students List sorted by Total
+    # Serial Students List sorted by Total (strictly Current Year)
     sorted_students = sorted(records, key=lambda x: x["total"] or 0, reverse=True)
+    for idx, s in enumerate(sorted_students, 1):
+        s["serial"] = str(idx)
 
-    # Summaries
-    current_percentages = [r["percentage"] for r in current if r["percentage"] is not None]
+    # Summaries (strictly Current Year students, count of repeaters completely removed)
+    current_percentages = [r["percentage"] for r in records if r["percentage"] is not None]
     summary = {
         "total": len(records),
         "attended": attended,
@@ -838,18 +849,15 @@ def build_view_data(parsed_bundle: dict) -> dict:
         "absent": absent,
         "pass_percentage": round(passed / attended * 100, 2) if attended else 0,
         "fail_percentage": round(failed / attended * 100, 2) if attended else 0,
-        "current_year": len(current),
-        "backlog": len(backlog),
+        "current_year": len(records),
+        "backlog": 0,
     }
-    cur_attended = sum(r["result"] in {"PASS", "FAIL"} for r in current)
-    cur_passed = sum(r["result"] == "PASS" for r in current)
-    cur_failed = sum(r["result"] != "PASS" for r in current)
     current_summary = {
-        "total": len(current),
-        "attended": cur_attended,
-        "passed": cur_passed,
-        "failed": cur_failed,
-        "pass_percentage": round(cur_passed / cur_attended * 100, 2) if cur_attended else 0,
+        "total": len(records),
+        "attended": attended,
+        "passed": passed,
+        "failed": failed,
+        "pass_percentage": round(passed / attended * 100, 2) if attended else 0,
         "average_percentage": round(sum(current_percentages) / len(current_percentages), 2) if current_percentages else 0,
     }
 
@@ -862,10 +870,7 @@ def build_view_data(parsed_bundle: dict) -> dict:
         "multiple_failures": multiple_failures,
         "toppers": overall_toppers,
         "subject_toppers": subject_toppers,
-        "backlog_students": [
-            {"usn": r["usn"], "name": r["name"], "result": r["result"], "percentage": r["percentage"] or "-"}
-            for r in backlog
-        ],
+        "backlog_students": [],
         "warnings": warnings,
         "filename": filename,
         "format_type": parsed_bundle.get("format_type", "Standard Tabulation Register"),

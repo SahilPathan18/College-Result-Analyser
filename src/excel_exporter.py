@@ -8,7 +8,6 @@ Bangalore University departmental ledger format:
 - Visual pass/fail highlighting (soft green / soft red)
 - Subject-wise Result Analysis table with dynamic pass rates
 - Overall Class Result Summary with grade tier segmentation (Distinction, First Class, etc.)
-- Secondary worksheet for Backlog / Repeater candidates
 """
 from __future__ import annotations
 
@@ -100,21 +99,12 @@ def export_pretty_excel(filepath: str, data: dict, df=None) -> None:
     if not current_students:
         current_students = sorted(all_students, key=lambda s: s.get("usn", ""))
 
-    backlog_students = sorted(
-        [s for s in all_students if s.get("year_type") != "Current Year"],
-        key=lambda s: s.get("usn", "")
-    )
-
     sem_ord = _get_sem_ord(meta.get("semester", "5th"))
     sheet_title = f"{sem_ord} Sem Result Analysis"
     ws = wb.active
     ws.title = sheet_title
 
     _render_analysis_sheet(ws, meta, courses, current_students, is_backlog=False)
-
-    if backlog_students:
-        ws_back = wb.create_sheet(title="Backlog Students")
-        _render_analysis_sheet(ws_back, meta, courses, backlog_students, is_backlog=True)
 
     Path(filepath).parent.mkdir(parents=True, exist_ok=True)
     wb.save(filepath)

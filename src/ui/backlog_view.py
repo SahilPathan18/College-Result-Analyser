@@ -29,14 +29,14 @@ def build(body, data: dict, shell):
     grid_equal(tiles, widgets, 3, gap=14, uniform="tile")
 
     right = Card(wrap)
-    card_head(right, "Backlog & Repeater Students", f"{summary['backlog']} candidates flagged", hint_size=12
+    card_head(right, "Backlog & Repeater Students", f"{summary.get('backlog', 0)} candidates flagged", hint_size=12
               ).pack(fill="x", padx=20, pady=(20, 16))
     cols = [{"title": "Register Number", "w": 140, "flex": 1}, {"title": "Student Name", "w": 140, "flex": 2},
             {"title": "Status", "w": 100, "flex": 0}, {"title": "Percentage", "w": 100, "flex": 0}]
     table = DataTable(right, cols, max_height=520, pad_x=10, empty_text="No backlog records present.")
     table.pack(fill="x", padx=20, pady=(0, 20))
     rows = []
-    for s in data["backlog_students"]:
+    for s in data.get("backlog_students", []):
         res = str(s["result"])
         kind = "pass" if res == "PASS" else ("fail" if res == "FAIL" else "plain")
         pct = s["percentage"]

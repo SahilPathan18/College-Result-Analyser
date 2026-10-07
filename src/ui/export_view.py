@@ -7,8 +7,8 @@ from . import theme as T
 from .components import AppButton, Card, GradientCanvas, card_head
 from .theme import F, TkF
 
-LEAD = ("Exports complete register analysis with auto-formatted worksheets for Summary, Student Results, "
-        "Subject Analytics, Failed Students, Toppers, and Year Types.")
+LEAD = ("Exports complete current-year register analysis with auto-formatted worksheets for Summary, "
+        "Student Results, Subject Analytics, Failed Students, and Toppers.")
 
 
 def build(body, data: dict, shell):

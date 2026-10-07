@@ -36,8 +36,8 @@ def _spline(points, tension=0.35):
 class ChartWidget:
     """kind: 'bar' (rounded top corners) or 'line' (smooth, filled, round points)."""
 
-    def __init__(self, master, kind: str, labels: list[str], values: list[float], color: str, height: int = 240):
-        self.kind, self.labels, self.values, self.color = kind, labels, [float(v) for v in values], color
+    def __init__(self, master, kind: str, labels: list[str], values: list[float], color: str, height: int = 240, suffix: str = ""):
+        self.kind, self.labels, self.values, self.color, self.suffix = kind, labels, [float(v) for v in values], color, suffix
         self.S = scale_of(master)
         self.fig = Figure(figsize=(5.0, height / 100), dpi=100 * self.S, facecolor="white")
         self.ax = self.fig.add_axes([0.1, 0.2, 0.85, 0.7])
@@ -46,6 +46,15 @@ class ChartWidget:
         self.widget.configure(height=int(height * self.S), bg="white", highlightthickness=0, bd=0)
         self.canvas.mpl_connect("resize_event", lambda e: self.render())
         self.render()
+
+    def _format_val(self, v: float) -> str:
+        if abs(v - round(v)) < 1e-4:
+            s = str(int(round(v)))
+        elif abs(v * 10 - round(v * 10)) < 1e-4:
+            s = f"{v:.1f}"
+        else:
+            s = f"{v:.2f}".rstrip("0").rstrip(".")
+        return f"{s}{self.suffix}"
 
     # ------------------------------------------------------------------
     def render(self):
@@ -59,10 +68,13 @@ class ChartWidget:
         ymax = float(ticks[-1])
         ticks = [t for t in ticks if t >= 0]
 
+        headroom = max(ymax * 0.16, 0.8)
+        ylim_max = ymax + headroom
+
         # --- layout in real pixels (mirrors Chart.js auto padding) -------------------
         left = (len(f"{int(ymax)}") * 6.6 + 16) * S
-        right = 12 * S
-        top = 10 * S
+        right = 16 * S
+        top = 18 * S
         slot = (W - left - right) / n
         longest = max(len(s) for s in self.labels) * 5.9 * S
         rotate = longest > slot - 6 * S
@@ -81,7 +93,7 @@ class ChartWidget:
         for side in ("left", "bottom"):
             ax.spines[side].set_color("#e5e7eb")
             ax.spines[side].set_linewidth(1 * PT)
-        ax.set_ylim(0, ymax)
+        ax.set_ylim(0, ylim_max)
         ax.set_yticks(ticks)
         ax.yaxis.grid(True, color="#f1f5f9", linewidth=1 * PT)
         ax.set_axisbelow(True)
@@ -91,32 +103,42 @@ class ChartWidget:
             lbl.set_fontfamily(_FONT)
 
         if self.kind == "bar":
-            self._bars(ax, n, ymax, axw, axh, S)
+            self._bars(ax, n, ylim_max, axw, axh, S)
         else:
-            self._line(ax, n, ymax, axw, axh, S)
+            self._line(ax, n, ylim_max, axw, axh, S)
 
         ax.set_xticks(range(n))
         ax.set_xticklabels(self.labels, rotation=25 if rotate else 0, ha="right" if rotate else "center",
                            rotation_mode="anchor", fontfamily=_FONT)
         self.canvas.draw_idle()
 
-    def _bars(self, ax, n, ymax, axw, axh, S):
+    def _bars(self, ax, n, ylim_max, axw, axh, S):
         ax.set_xlim(-0.5, n - 0.5)
-        dpx, dpy = n / axw, ymax / axh                  # data units per pixel
+        dpx, dpy = n / axw, ylim_max / axh                  # data units per pixel
         r = 6 * S * dpx
         aspect = dpy / dpx
         bw = 0.72
         pad = 14 * S * dpy                               # extends below 0 so the bottom corners are clipped away
         for i, v in enumerate(self.values):
-            if v <= 0:
-                continue
-            ax.add_patch(FancyBboxPatch((i - bw / 2, -pad), bw, v + pad, boxstyle=f"round,pad=0,rounding_size={r}",
-                                        mutation_aspect=aspect, facecolor=self.color, edgecolor="none", linewidth=0))
+            if v > 0:
+                ax.add_patch(FancyBboxPatch((i - bw / 2, -pad), bw, v + pad, boxstyle=f"round,pad=0,rounding_size={r}",
+                                            mutation_aspect=aspect, facecolor=self.color, edgecolor="none", linewidth=0))
+            txt = self._format_val(v)
+            color = "#0f172a" if v > 0 else "#94a3b8"
+            ax.annotate(txt, (i, max(v, 0)),
+                        textcoords="offset points",
+                        xytext=(0, 4 * S),
+                        ha="center", va="bottom",
+                        fontfamily=_FONT,
+                        fontsize=9.5 * PT,
+                        fontweight="bold",
+                        color=color,
+                        clip_on=False)
 
-    def _line(self, ax, n, ymax, axw, axh, S):
+    def _line(self, ax, n, ylim_max, axw, axh, S):
         ax.set_xlim(-0.12, max(n - 1, 1) + 0.12)
         span = max(n - 1, 1)
-        pts = [(axw * i / span, v / ymax * axh) for i, v in enumerate(self.values)]
+        pts = [(axw * i / span, v / ylim_max * axh) for i, v in enumerate(self.values)]
         curve = [pts[0]]
         if n > 1:
             cps = _spline(pts)
@@ -131,8 +153,19 @@ class ChartWidget:
                     curve.append((u**3 * p0[0] + 3 * u * u * t * c1[0] + 3 * u * t * t * c2[0] + t**3 * p3[0],
                                   u**3 * p0[1] + 3 * u * u * t * c1[1] + 3 * u * t * t * c2[1] + t**3 * p3[1]))
         xs = [x / axw * span for x, _ in curve]
-        ys = [y / axh * ymax for _, y in curve]
+        ys = [y / axh * ylim_max for _, y in curve]
         ax.fill_between(xs, 0, ys, color=self.color, alpha=0.10, linewidth=0)
         ax.plot(xs, ys, color=self.color, linewidth=2.5 * PT, solid_capstyle="round")
         ax.plot(list(range(n)), self.values, "o", markersize=8 * PT, markerfacecolor=self.color,
                 markeredgecolor=self.color, clip_on=False)
+        for i, v in enumerate(self.values):
+            txt = self._format_val(v)
+            ax.annotate(txt, (i, v),
+                        textcoords="offset points",
+                        xytext=(0, 6 * S),
+                        ha="center", va="bottom",
+                        fontfamily=_FONT,
+                        fontsize=9.5 * PT,
+                        fontweight="bold",
+                        color="#0f172a",
+                        clip_on=False)

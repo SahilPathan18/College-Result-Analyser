@@ -9,7 +9,6 @@ from .student_dialog import open_student_dialog
 
 PAGE_SIZE = 12
 RESULT_OPTIONS = {"All Results (Pass/Fail)": "ALL", "Passed Only": "PASS", "Failed Only": "FAIL"}
-YEAR_OPTIONS = {"All Types": "ALL", "Current Year": "Current Year", "Backlog / Repeater": "Backlog / Repeater"}
 SORT_OPTIONS = {"Sort: Grand Total": "total", "Sort: Percentage": "percentage", "Sort: Student Name": "name"}
 
 
@@ -30,19 +29,17 @@ class StudentsView:
         group = ctk.CTkFrame(bar, fg_color="transparent")
         group.pack(side="right")
         self.result_sel = Select(group, list(RESULT_OPTIONS), self._changed, width=190)
-        self.year_sel = Select(group, list(YEAR_OPTIONS), self._changed, width=150)
         self.sort_sel = Select(group, list(SORT_OPTIONS), self._changed, width=170)
-        for i, w in enumerate((self.result_sel, self.year_sel, self.sort_sel)):
+        for i, w in enumerate((self.result_sel, self.sort_sel)):
             w.pack(side="left", padx=(0 if i == 0 else 10, 0))
 
         cols = [
             {"title": "Rank", "w": 70, "flex": 0},
-            {"title": "Register Number", "w": 150, "flex": 1},
-            {"title": "Student Name", "w": 200, "flex": 2},
-            {"title": "Grand Total", "w": 120, "flex": 1},
-            {"title": "Percentage", "w": 110, "flex": 1},
+            {"title": "Register Number", "w": 160, "flex": 1},
+            {"title": "Student Name", "w": 220, "flex": 2},
+            {"title": "Grand Total", "w": 130, "flex": 1},
+            {"title": "Percentage", "w": 120, "flex": 1},
             {"title": "Result Status", "w": 130, "flex": 1},
-            {"title": "Year Type", "w": 150, "flex": 1},
         ]
         self.table = DataTable(card, cols, max_height=520, on_click=self._open, empty_text="No matching student records found.")
         self.table.pack(fill="x", padx=20)
@@ -55,12 +52,10 @@ class StudentsView:
     def _filtered(self) -> list[dict]:
         q = self.search.get().lower().strip()
         rf = RESULT_OPTIONS[self.result_sel.get()]
-        yf = YEAR_OPTIONS[self.year_sel.get()]
         sv = SORT_OPTIONS[self.sort_sel.get()]
         rows = [s for s in self.students
                 if (not q or q in (s["name"] or "").lower() or q in (s["usn"] or "").lower())
-                and (rf == "ALL" or s["result"] == rf)
-                and (yf == "ALL" or s["year_type"] == yf)]
+                and (rf == "ALL" or s["result"] == rf)]
         if sv == "name":
             rows.sort(key=lambda s: (s["name"] or "").casefold())
         elif sv == "percentage":
@@ -90,7 +85,6 @@ class StudentsView:
                 Inline(Txt(s["total"], "ui7"), Txt(f"/ {max_t}", "ui", 11, T.LIGHT)),
                 Txt(pct, "ui7"),
                 BadgeCell(s["result"], "pass" if s["result"] == "PASS" else "fail"),
-                Txt(s["year_type"], "ui", 12, T.MUTED),
             ])
         self.table.set_rows(out)
         self.pager.set_label(f"Page {self.page} of {pages} ({len(rows)} students)")

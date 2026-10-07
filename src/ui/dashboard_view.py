@@ -22,8 +22,6 @@ def build(body, data: dict, shell) -> None:
         ("failed", "Failed", T.RED, None, "✕"),
         ("pass_percentage", "Pass Percentage", T.AMBER, None, "%"),
         ("fail_percentage", "Fail Percentage", T.ORANGE, "chart_down", None),
-        ("current_year", "Current-Year", T.VIOLET, "calendar", None),
-        ("backlog", "Backlog / Repeaters", T.SLATE, None, "↻"),
     ]
     grid = ctk.CTkFrame(body, fg_color="transparent")
     grid.pack(fill="x", pady=(0, 20))
@@ -31,7 +29,7 @@ def build(body, data: dict, shell) -> None:
     for key, label, color, emo, glyph in spec:
         value = f"{summary[key]}" + ("%" if "percentage" in key else "")
         cards.append(KpiCard(grid, label, value, color, icon_name=emo, glyph=glyph))
-    grid_equal(grid, cards, 4, gap=14, uniform="kpi")
+    grid_equal(grid, cards, 3, gap=14, uniform="kpi")
 
     # ---- "Result Intelligence" banner ----------------------------------------------
     def layout(c: GradientCanvas):
@@ -65,7 +63,7 @@ def build(body, data: dict, shell) -> None:
                       outline=T.blend("#ffffff", .20, c.grad_color_at(.85, .5)), width=max(2, round(2 * S)),
                       dash=(int(5 * S), int(4 * S)))
         c.create_text(cx, cy - 8 * S, text=str(summary["total"]), fill="#ffffff", font=TkF("brand", 38, S))
-        c.create_text(cx, cy + 28 * S, text="Records Analyzed", fill="#94a3b8", font=TkF("ui", 11, S))
+        c.create_text(cx, cy + 28 * S, text="Students Analyzed", fill="#94a3b8", font=TkF("ui", 11, S))
 
     banner = GradientCanvas(body, "#0f172a", "#1e293b", 200, layout)
     banner.pack(fill="x", pady=(0, 20))
@@ -74,13 +72,13 @@ def build(body, data: dict, shell) -> None:
     subjects = data["subjects"]
     labels = [s["name"] if len(s["name"]) <= 20 else s["name"][:18] + "..." for s in subjects]
 
-    def chart_card(parent, title, hint, kind, values, color):
+    def chart_card(parent, title, hint, kind, values, color, suffix=""):
         card = Card(parent)
         head = card_head(card, title, hint)
         head.pack(fill="x", padx=20, pady=(20, 16))
         holder = ctk.CTkFrame(card, fg_color="#ffffff", corner_radius=0)
         holder.pack(fill="both", expand=True, padx=20, pady=(0, 20))
-        chart = ChartWidget(holder, kind, labels, values, color, height=240)
+        chart = ChartWidget(holder, kind, labels, values, color, height=240, suffix=suffix)
         chart.widget.pack(fill="both", expand=True)
         card._chart = chart
         return card
@@ -88,7 +86,7 @@ def build(body, data: dict, shell) -> None:
     row = ctk.CTkFrame(body, fg_color="transparent")
     row.pack(fill="x")
     c1 = chart_card(row, "Pass Percentage by Subject", "Success rate %", "bar",
-                    [s["pass_percentage"] for s in subjects], T.BLUE)
+                    [s["pass_percentage"] for s in subjects], T.BLUE, suffix="%")
     c2 = chart_card(row, "Average Marks by Subject", "Class mean score", "line",
                     [s["average"] for s in subjects], T.GREEN)
     grid_equal(row, [c1, c2], 2, gap=16, uniform="chart")
