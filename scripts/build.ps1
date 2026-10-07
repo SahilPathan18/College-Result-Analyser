@@ -7,6 +7,7 @@ Write-Host "=========================================="
 Write-Host "1. Stopping running processes & cleaning..."
 Write-Host "=========================================="
 Get-Process -Name "*ResultAnalyzer*" -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
+Get-CimInstance Win32_Process -ErrorAction SilentlyContinue | Where-Object { $_.CommandLine -like "*ResultAnalyzer*" -or $_.CommandLine -like "*result-analyzer*" } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }
 Start-Sleep -Milliseconds 500
 
 if (Test-Path "build") { Remove-Item -Recurse -Force "build" -ErrorAction SilentlyContinue }

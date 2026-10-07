@@ -346,20 +346,23 @@ class MainWindow(ctk.CTk, _DnDBase):
 
         # Otherwise scroll the active pane smoothly
         if direction is not None:
-            units = -direction * 40
+            units = -direction * 48
         elif sys.platform.startswith("win"):
             delta = getattr(event, "delta", 0)
             if delta != 0:
-                # Proportional scroll: ~48px for standard 120-unit mouse wheel click,
-                # fluid 1-12px per event for Windows precision trackpad two-finger gestures
-                units = -int(round(delta * 0.4))
-                if units == 0:
-                    units = -1 if delta > 0 else 1
+                if delta % 120 == 0:
+                    # Discrete mouse wheel click (~72px per wheel notch)
+                    units = -int((delta / 120) * 72)
+                else:
+                    # Precision trackpad gestures (fluid, natural scaling)
+                    units = -int(round(delta * 1.6))
+                    if units == 0:
+                        units = -2 if delta > 0 else 2
             else:
                 units = 0
         elif sys.platform == "darwin":
             delta = getattr(event, "delta", 0)
-            units = -int(delta)
+            units = -int(delta * 2)
         else:
             units = 30
 
@@ -384,10 +387,10 @@ class MainWindow(ctk.CTk, _DnDBase):
             pass
 
         if event.keysym == "Up":
-            active_pane._parent_canvas.yview("scroll", -2, "units")
+            active_pane._parent_canvas.yview("scroll", -48, "units")
             return "break"
         elif event.keysym == "Down":
-            active_pane._parent_canvas.yview("scroll", 2, "units")
+            active_pane._parent_canvas.yview("scroll", 48, "units")
             return "break"
         elif event.keysym in ("Prior", "Page_Up"):
             active_pane._parent_canvas.yview("scroll", -1, "pages")

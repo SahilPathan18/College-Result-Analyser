@@ -393,6 +393,10 @@ class DataTable(tk.Canvas):
 
     # ---- drawing --------------------------------------------------------
     def _redraw(self):
+        if self.winfo_width() < 10:
+            return
+        if not self._col_w or (self._rows and len(self._offsets) != len(self._rows)):
+            self._relayout()
         self.delete("all")
         self._bg_ids = {}
         S = self.S
@@ -550,9 +554,13 @@ class DataTable(tk.Canvas):
         if ms <= 0:
             return None             # nothing to scroll here -> let the page scroll
         if direction is None:
-            step = -(e.delta / 120.0) * 42
+            delta = getattr(e, "delta", 0)
+            if delta % 120 == 0:
+                step = -(delta / 120.0) * 48
+            else:
+                step = -delta * 1.5
         else:
-            step = -direction * 42
+            step = -direction * 48
         new_scroll = min(ms, max(0.0, self._scroll + step))
         if new_scroll == self._scroll:
             return None             # at table boundary -> let the page scroll!
