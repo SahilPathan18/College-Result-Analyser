@@ -102,7 +102,7 @@ class InstallerApp:
                              fg="#ffffff", bg="#0f172a", anchor="w")
         title_lbl.pack(fill="x", padx=24, pady=(16, 2))
 
-        sub_lbl = tk.Label(header, text="Bangalore University Result Analysis Desktop Application",
+        sub_lbl = tk.Label(header, text="Result Analysis Desktop Application",
                            font=("Segoe UI", 9), fg="#94a3b8", bg="#0f172a", anchor="w")
         sub_lbl.pack(fill="x", padx=24)
 
