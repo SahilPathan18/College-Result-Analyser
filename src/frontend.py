@@ -1,5 +1,5 @@
 """
-Frontend module for Bangalore University Result Analyzer.
+Frontend module for Result Analyzer.
 Exposes the modern CustomTkinter MainWindow.
 """
 from __future__ import annotations

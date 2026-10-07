@@ -303,7 +303,7 @@ class MainWindow(ctk.CTk, _DnDBase):
             except Exception:
                 self.dnd_ok = False
 
-        self.title("📊 Bangalore University Result Analyzer")
+        self.title("Result Analyzer")
         sw, sh = self.winfo_screenwidth(), self.winfo_screenheight()
         s = T.scale_of(self)
         w, h = int(min(1366, sw / s - 60)), int(min(840, sh / s - 90))

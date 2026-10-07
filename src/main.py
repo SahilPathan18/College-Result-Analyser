@@ -1,5 +1,5 @@
 """
-Main entry point for Bangalore University Result Analyzer.
+Main entry point for Result Analyzer.
 """
 from __future__ import annotations
 

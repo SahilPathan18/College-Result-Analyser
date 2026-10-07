@@ -1,5 +1,5 @@
 """
-Core processing and analytics engine for Bangalore University Result Analyzer.
+Core processing and analytics engine for Result Analyzer.
 Extracts metadata, dynamic course catalogues, and student mark cards from tabulation PDFs,
 and prepares synthesized view data for the native CustomTkinter UI and Excel export.
 """

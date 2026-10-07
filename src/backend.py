@@ -1,5 +1,5 @@
 """
-Backend module for Bangalore University Result Analyzer.
+Backend module for Result Analyzer.
 Handles PDF parsing and data extraction.
 """
 

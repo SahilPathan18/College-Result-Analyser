@@ -1,5 +1,5 @@
 # build.ps1
-# Professional Build Script for Bangalore University Result Analyzer
+# Professional Build Script for Result Analyzer
 
 $ErrorActionPreference = "Stop"
 
