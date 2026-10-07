@@ -151,12 +151,8 @@ class AppShell(ctk.CTkFrame):
 
         brand = ctk.CTkFrame(sb, fg_color="transparent")
         brand.pack(fill="x", padx=16, pady=16)
-        badge = ctk.CTkFrame(brand, fg_color="#ffffff", corner_radius=T.R_MD - 2, width=36, height=36)
-        badge.pack(side="left")
-        badge.pack_propagate(False)
-        ctk.CTkLabel(badge, text="", image=T.logo(30, rounded=False)).pack(expand=True)
-        ctk.CTkLabel(brand, text="Result Analyzer", font=F("brand", 16), text_color="#ffffff"
-                     ).pack(side="left", padx=(12, 0))
+        ctk.CTkLabel(brand, text="Result Analyzer", font=F("brand", 17), text_color="#ffffff"
+                     ).pack(side="left")
         Line(sb, T.blend("#ffffff", .06, T.SIDEBAR_BG)).pack(fill="x")
 
         chip = ctk.CTkFrame(sb, fg_color=T.blend("#ffffff", .04, T.SIDEBAR_BG), border_width=1,
