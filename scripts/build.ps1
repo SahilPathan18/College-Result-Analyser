@@ -6,8 +6,9 @@ $ErrorActionPreference = "Stop"
 Write-Host "=========================================="
 Write-Host "1. Cleaning previous build artifacts..."
 Write-Host "=========================================="
-if (Test-Path "build") { Remove-Item -Recurse -Force "build" }
-if (Test-Path "dist") { Remove-Item -Recurse -Force "dist" }
+if (Test-Path "build") { Remove-Item -Recurse -Force "build" -ErrorAction SilentlyContinue }
+if (Test-Path "dist\ResultAnalyzer") { Remove-Item -Recurse -Force "dist\ResultAnalyzer" -ErrorAction SilentlyContinue }
+if (Test-Path "dist\ResultAnalyzerSetup.exe") { Remove-Item -Force "dist\ResultAnalyzerSetup.exe" -ErrorAction SilentlyContinue }
 
 Write-Host ""
 Write-Host "=========================================="
