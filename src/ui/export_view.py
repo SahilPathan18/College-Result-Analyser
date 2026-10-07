@@ -18,16 +18,18 @@ def build(body, data: dict, shell):
         x = 32 * S
         c.create_text(x, 36 * S + 6 * S, text="READY FOR EXPORT", anchor="w", fill=T.RED, font=TkF("ui7", 10, S))
         c.create_text(x, 66 * S, text="Generate Comprehensive Excel Workbook", anchor="w", fill="#ffffff", font=TkF("ui7", 22, S))
-        c.create_text(x, 90 * S, text=LEAD, anchor="nw", fill="#94a3b8", font=TkF("ui", 13, S), width=520 * S)
+        if not hasattr(c, "_btn"):
+            c._btn = AppButton(c, "Download Excel Report (.xlsx)", "primary", shell.export_excel,
+                               image=T.icon("download_white_bold", 20), height=48, size=14, radius=T.R_MD,
+                               bg_color=c.grad_color_at(.9, .5))
+        btn_w = c._btn.winfo_reqwidth() if c._btn.winfo_reqwidth() > 10 else int(280 * S)
+        text_max_w = max(int(240 * S), int(W - btn_w - 72 * S))
+        c.create_text(x, 90 * S, text=LEAD, anchor="nw", fill="#94a3b8", font=TkF("ui", 13, S), width=text_max_w)
         fx = x
         font = TkF("ui", 12, S)
         for label in ("✓ Formatted Excel (.xlsx)", "✓ Complete Mark Breakdown", "✓ Filter & Rank Columns"):
             c.create_text(fx, 160 * S, text=label, anchor="w", fill="#cbd5e1", font=font)
             fx += font.measure(label) + 16 * S
-        if not hasattr(c, "_btn"):
-            c._btn = AppButton(c, "Download Excel Report (.xlsx)", "primary", shell.export_excel,
-                               image=T.icon("download_white_bold", 20), height=48, size=14, radius=T.R_MD,
-                               bg_color=c.grad_color_at(.9, .5))
         c.create_window(W - 32 * S, H / 2, window=c._btn, anchor="e")
 
     hero = GradientCanvas(body, "#090d16", "#1e293b", 200, layout)

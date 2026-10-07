@@ -213,10 +213,21 @@ class AppShell(ctk.CTkFrame):
         for label, num, pct, color in (("Failed: ", s["failed"], s["fail_percentage"], T.RED),
                                        ("Passed: ", s["passed"], s["pass_percentage"], T.GREEN)):
             pill = ctk.CTkFrame(acts, fg_color="#f1f5f9", corner_radius=20)
-            pill.pack(side="right", padx=(0, 12), pady=11)
-            ctk.CTkFrame(pill, width=8, height=8, fg_color=color, corner_radius=4).pack(side="left", padx=(12, 6), pady=11)
+            pill.pack(side="right", padx=(0, 10), pady=11)
+            ctk.CTkFrame(pill, width=8, height=8, fg_color=color, corner_radius=4).pack(side="left", padx=(10, 6), pady=11)
             rich(pill, [(label, "ui", 12, T.TEXT2), (str(num), "ui7", 12, T.TEXT2), (f" ({pct}%)", "ui", 12, T.TEXT2)]
-                 ).pack(side="left", padx=(0, 12))
+                 ).pack(side="left", padx=(0, 10))
+
+        left = ctk.CTkFrame(top, fg_color="transparent")
+        left.pack(side="left", padx=(24, 8), fill="both", expand=True)
+        self.title_lbl = ctk.CTkLabel(left, text=TITLES["dashboard"], font=F("ui7", 17), text_color=T.TEXT, anchor="w")
+        self.title_lbl.pack(anchor="w", pady=(7, 0))
+        meta = self.data.get("metadata", {})
+        fmt = self.data.get("format_type", "Official Analysis")
+        prog_sem = f"{meta.get('program', 'Degree')} {('Semester ' + meta.get('semester')) if meta.get('semester') else ''}".strip()
+        sub_title = f"{prog_sem} · {fmt}" if prog_sem else fmt
+        ctk.CTkLabel(left, text=sub_title, font=F("ui", 11), text_color=T.MUTED,
+                     anchor="w").pack(anchor="w")
 
         if warnings:
             nb = ctk.CTkFrame(ws, fg_color="#fffbeb", corner_radius=0, height=36)
@@ -249,7 +260,9 @@ class AppShell(ctk.CTkFrame):
         self.status_text = ctk.CTkLabel(L, text="Ready", font=F("ui", 11), text_color=grey)
         self.status_text.pack(side="left")
         ctk.CTkLabel(L, text="  |  ", font=F("ui", 11), text_color=div).pack(side="left")
-        rich(L, [("Ledger: ", "ui", 11, grey), (str(self.data["filename"]), "ui7", 11, grey)]).pack(side="left")
+        raw_fname = str(self.data.get("filename") or "-")
+        disp_fname = raw_fname if len(raw_fname) <= 20 else raw_fname[:17] + "..."
+        rich(L, [("Ledger: ", "ui", 11, grey), (disp_fname, "ui7", 11, grey)]).pack(side="left")
         ctk.CTkLabel(L, text="  |  ", font=F("ui", 11), text_color=div).pack(side="left")
         rich(L, [("Records: ", "ui", 11, grey), (str(s["total"]), "ui7", 11, grey)]).pack(side="left")
         R = ctk.CTkFrame(bar, fg_color="transparent")
