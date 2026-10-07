@@ -25,9 +25,9 @@ class Pane(ctk.CTkScrollableFrame):
                          scrollbar_button_color="#cbd5e1", scrollbar_button_hover_color="#94a3b8")
         self.body = ctk.CTkFrame(self, fg_color="transparent")
         self.body.pack(fill="both", expand=True, padx=24, pady=24)
-        # CTk's default wheel step is far too large for a long page
+        # Pixel-smooth scrolling (1 unit = 1 pixel) for trackpads and precision wheels
         try:
-            self._parent_canvas.configure(yscrollincrement=16)
+            self._parent_canvas.configure(yscrollincrement=1)
         except Exception:
             pass
 

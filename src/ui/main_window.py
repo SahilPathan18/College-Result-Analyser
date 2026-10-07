@@ -298,6 +298,7 @@ class MainWindow(ctk.CTk, _DnDBase):
         self.bind_all("<F11>", self.toggle_fullscreen)
         self.bind_all("<Escape>", self.exit_fullscreen)
         self.bind_all("<MouseWheel>", self._on_global_mousewheel, add="+")
+        self.bind_all("<Shift-MouseWheel>", self._on_global_mousewheel, add="+")
         self.bind_all("<Button-4>", lambda e: self._on_global_mousewheel(e, direction=1), add="+")
         self.bind_all("<Button-5>", lambda e: self._on_global_mousewheel(e, direction=-1), add="+")
         self.bind_all("<Key>", self._on_global_key, add="+")
@@ -318,67 +319,56 @@ class MainWindow(ctk.CTk, _DnDBase):
         active_pane = self.shell._panes[self.shell.current]
 
         # Determine widget directly under the pointer
-        widget = event.widget
+        widget = None
         if hasattr(event, "x_root") and hasattr(event, "y_root"):
             try:
-                containing = self.winfo_containing(event.x_root, event.y_root)
-                if containing is not None:
-                    widget = containing
+                widget = self.winfo_containing(event.x_root, event.y_root)
             except Exception:
                 pass
-
-        # Check if the widget is within this application window
-        w = widget
-        is_ours = False
-        while w is not None:
-            if w is self:
-                is_ours = True
-                break
-            w = getattr(w, "master", None)
-        if not is_ours:
-            return
+        if widget is None:
+            widget = getattr(event, "widget", None)
 
         # Check if the cursor is hovering over an inner DataTable that has vertical scroll room
-        from .components import DataTable
-        w = widget
-        dt_instance = None
-        while w is not None:
-            if isinstance(w, DataTable):
-                dt_instance = w
-                break
-            w = getattr(w, "master", None)
+        if widget is not None:
+            from .components import DataTable
+            w = widget
+            dt_instance = None
+            while w is not None:
+                if isinstance(w, DataTable):
+                    dt_instance = w
+                    break
+                w = getattr(w, "master", None)
 
-        if dt_instance is not None and dt_instance._max_scroll() > 0:
-            res = dt_instance._on_wheel(event, direction=direction)
-            if res == "break":
-                return "break"
+            if dt_instance is not None and dt_instance._max_scroll() > 0:
+                res = dt_instance._on_wheel(event, direction=direction)
+                if res == "break":
+                    return "break"
 
-        # Otherwise scroll the active pane if the pointer is within the viewport or workspace
-        w = widget
-        in_viewport = False
-        while w is not None:
-            if w is self.shell.viewport or w is active_pane or w is active_pane._parent_canvas or w is active_pane.body:
-                in_viewport = True
-                break
-            w = getattr(w, "master", None)
-
-        if in_viewport:
-            if direction is not None:
-                units = -direction * 3
-            elif sys.platform.startswith("win"):
-                units = -int(event.delta / 120) * 3
-                if units == 0 and event.delta != 0:
-                    units = -1 if event.delta > 0 else 1
-            elif sys.platform == "darwin":
-                units = -int(event.delta)
+        # Otherwise scroll the active pane smoothly
+        if direction is not None:
+            units = -direction * 40
+        elif sys.platform.startswith("win"):
+            delta = getattr(event, "delta", 0)
+            if delta != 0:
+                # Proportional scroll: ~48px for standard 120-unit mouse wheel click,
+                # fluid 1-12px per event for Windows precision trackpad two-finger gestures
+                units = -int(round(delta * 0.4))
+                if units == 0:
+                    units = -1 if delta > 0 else 1
             else:
-                units = 3
+                units = 0
+        elif sys.platform == "darwin":
+            delta = getattr(event, "delta", 0)
+            units = -int(delta)
+        else:
+            units = 30
 
+        if units != 0:
             try:
                 active_pane._parent_canvas.yview("scroll", units, "units")
             except Exception:
                 pass
-            return "break"
+        return "break"
 
     def _on_global_key(self, event):
         if not self.shell or not self.shell.current or self.shell.current not in self.shell._panes:
