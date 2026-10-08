@@ -188,7 +188,12 @@ def _parse_format2(pages: list[str], pdf_path: str | Path) -> tuple[dict, list[s
             internal = int(float(cia_str)) if re.match(r"^\d+(\.\d+)?$", cia_str) else None
             theory = int(float(see_str)) if re.match(r"^\d+(\.\d+)?$", see_str) else None
 
-            grace = int(lines[p + 1]) if (p + 1 < len(lines) and lines[p + 1].isdigit()) else 0
+            grace = 0.0
+            if p + 1 < len(lines):
+                try:
+                    grace = float(lines[p + 1])
+                except (ValueError, TypeError):
+                    grace = 0.0
             max_tot = int(lines[p + 2]) if (p + 2 < len(lines) and lines[p + 2].isdigit()) else None
             tot_obt = int(lines[p + 3]) if (p + 3 < len(lines) and lines[p + 3].isdigit()) else None
             crs = int(lines[p + 4]) if (p + 4 < len(lines) and lines[p + 4].isdigit()) else None
@@ -213,6 +218,7 @@ def _parse_format2(pages: list[str], pdf_path: str | Path) -> tuple[dict, list[s
             subjects_data[code] = {
                 "theory": theory,
                 "internal": internal,
+                "grace": grace,
                 "total": tot_obt,
                 "status": status,
                 "cr": crs,
@@ -221,7 +227,13 @@ def _parse_format2(pages: list[str], pdf_path: str | Path) -> tuple[dict, list[s
             }
 
             if theory is not None and internal is not None and tot_obt is not None:
-                if theory + internal != tot_obt:
+                diff = tot_obt - (theory + internal)
+                is_valid = (
+                    (theory + internal == tot_obt) or
+                    (round(theory + internal + grace) == tot_obt) or
+                    (1 <= diff <= 5 and status == "PASS")
+                )
+                if not is_valid:
                     warnings.append(f"{usn}: {code} theory + internal mismatch")
 
         # Parse total part
@@ -513,6 +525,10 @@ def _parse_format1(pages: list[str], full_text: str, pdf_path: str | Path) -> tu
         res_tail = block[block.rfind("M.C.No"):] if "M.C.No" in block else block
         subject_statuses = [normalize_status(w) for w in re.findall(r"\b(Pass|Fail|Absent|P|F|A)\b", res_tail, re.I)]
 
+        # Grace row
+        grace_m = re.search(r"Grace\n(.*?)(?=\nCr\.?|\nSGPA|\nGP|\nTotal)", block, re.DOTALL)
+        grace_vals = [float(l.strip()) for l in grace_m.group(1).splitlines() if re.match(r"^-?\d+(\.\d+)?$", l.strip())] if grace_m else []
+
         # SGPA, CGPA, Term Grade, Overall Result
         sgpa_m = re.search(r"SGPA\s+([\d.]+)", block, re.I)
         cgpa_m = re.search(r"CGPA\s+([\d.]+)", block, re.I)
@@ -551,10 +567,12 @@ def _parse_format1(pages: list[str], full_text: str, pdf_path: str | Path) -> tu
             sub_cr = int(cr_vals[pos]) if pos < len(cr_vals) and (len(cr_vals) == n_subs or pos < len(cr_vals) - 1) else None
             sub_gp = gp_vals[pos] if pos < len(gp_vals) else None
             sub_cp = cp_vals[pos] if pos < len(cp_vals) and (len(cp_vals) == n_subs or pos < len(cp_vals) - 1) else None
+            sub_grace = grace_vals[pos] if pos < len(grace_vals) else (grace_vals[0] if len(grace_vals) == 1 else 0.0)
 
             subjects_data[code] = {
                 "theory": pair[0],
                 "internal": pair[1],
+                "grace": sub_grace,
                 "total": sub_total,
                 "status": sub_status,
                 "cr": sub_cr,
@@ -562,7 +580,13 @@ def _parse_format1(pages: list[str], full_text: str, pdf_path: str | Path) -> tu
                 "cp": sub_cp,
             }
             if pair[0] is not None and pair[1] is not None and sub_total is not None:
-                if pair[0] + pair[1] != sub_total:
+                diff = sub_total - (pair[0] + pair[1])
+                is_valid = (
+                    (pair[0] + pair[1] == sub_total) or
+                    (round(pair[0] + pair[1] + sub_grace) == sub_total) or
+                    (1 <= diff <= 5 and sub_status == "PASS")
+                )
+                if not is_valid:
                     warnings.append(f"{usn}: {code} theory + internal mismatch")
 
         # Fallback if student_codes were empty

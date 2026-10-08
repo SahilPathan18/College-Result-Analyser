@@ -63,7 +63,9 @@ def open_student_dialog(parent, student: dict, subjects_meta: list[dict]):
     tiles = ctk.CTkFrame(body, fg_color="transparent")
     tiles.pack(fill="x", pady=(20, 0), **pad)
     max_t = int(student.get("max_total") or 700)
-    specs = [("Grand Total", str(_val(student["total"])), f" / {max_t}", T.TEXT),
+    pct_val = student.get("percentage")
+    pct = f"{pct_val}%" if pct_val is not None and pct_val != "-" else "-"
+    specs = [("Grand Total", str(_val(student.get("total"))), f" / {max_t}", T.TEXT),
              ("Percentage", pct, "", T.TEXT),
              ("Semester Outcome", student["result"], "", T.BADGE_PASS_TEXT if passed else T.BADGE_FAIL_TEXT)]
     for c, (label, value, suffix, color) in enumerate(specs):
